@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>VoiceMarkets</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm6.25 11a6.25 6.25 0 0 1-12.5 0H4a8 8 0 0 0 7 7.937V22h2v-2.063A8 8 0 0 0 20 12h-1.75z"/>
+      </svg>
+      <h1 class="title">VoiceMarkets</h1>
+    </header>
+
+    <main class="main">
+      <button id="micBtn" class="mic-btn" aria-label="音声入力開始">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm6.25 11a6.25 6.25 0 0 1-12.5 0H4a8 8 0 0 0 7 7.937V22h2v-2.063A8 8 0 0 0 20 12h-1.75z"/>
+        </svg>
+      </button>
+      <p id="status" class="status">クリックして話す</p>
+      <p id="transcript" class="transcript"></p>
+    </main>
+
+    <ul id="results" class="results hidden" role="list"></ul>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
