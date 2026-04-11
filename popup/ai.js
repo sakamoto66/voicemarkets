@@ -11,6 +11,7 @@
  */
 
 import { extractKeywords, hasCJKText } from './search.js';
+import { t } from './i18n.js';
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     });
     if (availability !== 'available') return null;
 
-    onStatus('AIモデルを読み込み中…');
+    onStatus(t('status_loading_ai'));
     const systemPrompt = buildIntentSystemPrompt(bookmarkDictionary);
     console.debug('[VoiceMarkets] parseIntent systemPrompt:\n', systemPrompt);
 
@@ -118,7 +119,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
       required: ['selected', 'period', 'keywords', 'sources'],
     };
 
-    onStatus('クエリを解析中…');
+    onStatus(t('status_parsing_query'));
     const altLines = alternatives
       .map((a, i) => `${i + 1}. "${a.transcript.slice(0, 80)}" (confidence: ${a.confidence.toFixed(2)})`)
       .join('\n');

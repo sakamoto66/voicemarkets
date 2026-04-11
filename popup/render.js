@@ -3,6 +3,8 @@
  * Pure DOM functions; no Chrome API or global state dependencies.
  */
 
+import { t } from './i18n.js';
+
 /** Remove all child nodes without using innerHTML. */
 export function clearChildren(el) {
   while (el.firstChild) el.removeChild(el.firstChild);
@@ -48,15 +50,15 @@ export function renderResults(resultsList, rankingInfo, items, usedAI = false, c
   clearChildren(resultsList);
   clearChildren(rankingInfo);
 
-  rankingInfo.appendChild(document.createTextNode(`${items.length}件`));
+  rankingInfo.appendChild(document.createTextNode(t('result_count', String(items.length))));
   const badge = document.createElement('span');
   badge.className = usedAI ? 'badge badge-ai' : 'badge badge-keyword';
-  badge.textContent = usedAI ? 'AI' : 'キーワード順';
+  badge.textContent = usedAI ? 'AI' : t('badge_keyword');
   rankingInfo.appendChild(badge);
   if (corrected) {
     const correctedBadge = document.createElement('span');
     correctedBadge.className = 'badge badge-corrected';
-    correctedBadge.textContent = '補正';
+    correctedBadge.textContent = t('badge_corrected');
     rankingInfo.appendChild(correctedBadge);
   }
   rankingInfo.classList.remove('hidden');

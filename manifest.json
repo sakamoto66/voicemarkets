@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "VoiceMarkets",
+  "name": "__MSG_app_name__",
   "version": "0.1.0",
-  "description": "音声でブックマーク・履歴を検索して開く Chrome 拡張機能",
+  "description": "__MSG_app_description__",
+  "default_locale": "ja",
   "permissions": ["bookmarks", "history", "tabs"],
   "action": {
     "default_popup": "popup/popup.html",

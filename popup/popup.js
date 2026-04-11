@@ -14,6 +14,7 @@ import { SpeechRecognition, createVoice } from './voice.js';
 import { parseIntent, rankWithAI, extractKeywordsBilingual, checkAIAvailability } from './ai.js';
 import { buildBookmarkDictionary, buildHistoryCache } from './cache.js';
 import { setStatus, renderResults, hideResults } from './render.js';
+import { t, applyI18n } from './i18n.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const micBtn        = document.getElementById('micBtn');
@@ -42,7 +43,7 @@ function startListening() {
   if (isListening) return;
 
   if (!SpeechRecognition) {
-    status('このブラウザは音声認識に対応していません', true);
+    status(t('error_no_speech_api'), true);
     return;
   }
 
@@ -50,7 +51,7 @@ function startListening() {
     onStart: () => {
       isListening = true;
       micBtn.classList.add('listening');
-      status('聞いています…');
+      status(t('status_listening'));
       transcriptEl.value = '';
       hideResults(resultsList, rankingInfo, transcriptEl);
     },
@@ -71,11 +72,11 @@ function startListening() {
       isListening = false;
       micBtn.classList.remove('listening');
       if (event.error === 'not-allowed') {
-        status('マイク許可が必要です。chrome://settings/content/microphone で許可してください', true);
+        status(t('error_mic_permission'), true);
       } else if (event.error === 'no-speech') {
-        status('音声が検出されませんでした。もう一度試してください');
+        status(t('error_no_speech'));
       } else {
-        status(`音声認識エラー: ${event.error}`, true);
+        status(t('error_speech_recognition', event.error), true);
       }
     },
     // onEnd fires only when there was no error (see voice.js).
@@ -88,7 +89,7 @@ function startListening() {
   try {
     currentVoice.start();
   } catch (_) {
-    status('音声認識を開始できませんでした', true);
+    status(t('error_start_failed'), true);
     currentVoice = null;
   }
 }
@@ -96,7 +97,7 @@ function startListening() {
 function stopListening() {
   isListening = false;
   micBtn.classList.remove('listening');
-  status(transcriptEl.value ? '' : 'クリックして話す');
+  status(transcriptEl.value ? '' : t('status_idle'));
   currentVoice?.stop();
   currentVoice = null;
 }
@@ -112,7 +113,7 @@ async function runSearch(input) {
     : input;
 
   spinnerEl.classList.remove('hidden');
-  status('AIモデルを読み込み中…');
+  status(t('status_loading_ai'));
 
   try {
     // Stage 0: AI intent parsing — period, sources, keyword expansion
@@ -136,20 +137,20 @@ async function runSearch(input) {
     // Allow empty keywords only when AI detected a non-'all' period (temporal-only query)
     const hasTemporalIntent = intent?.period && intent.period !== 'all';
     if (keywords.length === 0 && !hasTemporalIntent) {
-      status('認識できませんでした。もう一度お試しください');
+      status(t('error_no_recognition'));
       return;
     }
 
     if (activeSources.size === 0) {
-      status('検索先を選択してください');
+      status(t('error_no_sources'));
       return;
     }
 
-    status('検索中…');
+    status(t('status_searching'));
     const candidates = await fetchCandidates(keywords, currentPeriod, activeSources);
 
     if (candidates.length === 0) {
-      status('一致するページが見つかりませんでした');
+      status(t('error_no_results'));
       return;
     }
 
@@ -160,7 +161,7 @@ async function runSearch(input) {
     renderResults(resultsList, rankingInfo, ranked.slice(0, 5), aiResult !== null, corrected);
     status('');
   } catch (_) {
-    status('検索中にエラーが発生しました。もう一度お試しください');
+    status(t('error_search_failed'));
   } finally {
     spinnerEl.classList.add('hidden');
   }
@@ -277,6 +278,7 @@ transcriptEl.addEventListener('keydown', (e) => {
 });
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+applyI18n();
 checkAIAvailability();
 
 Promise.all([
