@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1] — 2026-04-12
+
+### Changed
+- Voice recognition language and HTML `lang` attribute now follow Chrome's UI language setting (`chrome.i18n.getUILanguage()`) instead of being hardcoded to `ja-JP`
+
+### Added
+- Unit tests for `voice.js` language detection
+
 ## [0.2.0] — 2026-04-11
 
 ### Added
