@@ -142,7 +142,7 @@ async function runSearch(input) {
     }
 
     if (activeSources.size === 0) {
-      status(t('error_no_sources'));
+      status(t('error_no_sources'), true);
       return;
     }
 
