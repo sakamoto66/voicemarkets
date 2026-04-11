@@ -147,6 +147,11 @@ body {
   color: #111827;
 }
 
+.transcript.low-confidence {
+  border-bottom-color: #f59e0b;
+  color: #92400e;
+}
+
 /* ── Ranking info ── */
 .ranking-info {
   font-size: 11px;
@@ -177,6 +182,11 @@ body {
 .ranking-info .badge-keyword {
   background: #f3f4f6;
   color: #6b7280;
+}
+
+.ranking-info .badge-corrected {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 /* ── Results ── */

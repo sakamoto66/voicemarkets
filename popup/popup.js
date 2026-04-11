@@ -23,6 +23,8 @@ let isListening       = false;
 let currentPeriod     = 'all';
 let activeSources     = new Set(['bookmarks', 'history']);
 let bookmarkDictionary = []; // populated at startup from bookmark titles
+let bookmarkCache      = []; // flat list of all bookmark nodes (url + title + dateAdded)
+let historyCache       = []; // recent history items fetched once at popup startup
 
 // ── Web Speech API setup ──────────────────────────────────────────────────────
 const SpeechRecognition =
@@ -34,7 +36,7 @@ function initRecognition() {
   const r = new SpeechRecognition();
   r.lang = 'ja-JP';
   r.interimResults = true;
-  r.maxAlternatives = 1;
+  r.maxAlternatives = 3;
   r.continuous = false;
 
   // Track whether onerror already set a status so onend doesn't overwrite it.
@@ -50,12 +52,15 @@ function initRecognition() {
 
   r.onresult = (event) => {
     const result = event.results[event.results.length - 1];
-    const transcript = result[0].transcript;
-    transcriptEl.value = transcript;
+    const alternatives = Array.from({ length: result.length }, (_, i) => ({
+      transcript: result[i].transcript,
+      confidence: result[i].confidence ?? 1,
+    }));
+    transcriptEl.value = alternatives[0].transcript;
 
     if (result.isFinal) {
       stopListening();
-      runSearch(transcript);
+      runSearch(alternatives);
     }
   };
 
@@ -116,18 +121,38 @@ function stopListening() {
 }
 
 // ── Search pipeline ───────────────────────────────────────────────────────────
-async function runSearch(transcript) {
+/**
+ * @param {Array<{transcript: string, confidence: number}>|string} input
+ *   Either an array of recognition alternatives (from onresult) or a plain string (from manual input).
+ */
+async function runSearch(input) {
+  // Normalize: manual text input arrives as a string
+  const alternatives = typeof input === 'string'
+    ? [{ transcript: input, confidence: 1 }]
+    : input;
+
   spinnerEl.classList.remove('hidden');
   setStatus('AIモデルを読み込み中…');
 
   try {
     // Stage 0: Parse intent with AI, fall back to keyword extraction silently
-    const intent = await parseIntent(transcript, setStatus);
+    const intent = await parseIntent(alternatives, setStatus);
     if (intent) applyIntentToUI(intent);
+
+    // Use the transcript selected by AI, or the highest-confidence alternative
+    const selectedIndex = (intent?.selected != null && alternatives[intent.selected - 1])
+      ? intent.selected - 1
+      : 0;
+    const bestTranscript = alternatives[selectedIndex].transcript;
+    const corrected = selectedIndex > 0;
+    const lowConfidence = alternatives[0].confidence < 0.6;
+
+    transcriptEl.value = bestTranscript;
+    transcriptEl.classList.toggle('low-confidence', lowConfidence && !corrected);
 
     const keywords = (intent?.keywords?.length > 0)
       ? intent.keywords
-      : extractKeywords(transcript);
+      : await extractKeywordsBilingual(bestTranscript);
 
     // Allow empty keywords only when AI detected a non-'all' period (temporal-only query)
     const hasTemporalIntent = intent && intent.period && intent.period !== 'all';
@@ -151,11 +176,11 @@ async function runSearch(transcript) {
     }
 
     // Stage 2: Try Gemini Nano ranking, fall back to Stage 1 keyword order silently
-    const aiResult = await rankWithAI(candidates, transcript);
+    const aiResult = await rankWithAI(candidates, bestTranscript);
     const ranked = aiResult ?? candidates;
     const usedAI = aiResult !== null;
 
-    renderResults(ranked.slice(0, 5), usedAI);
+    renderResults(ranked.slice(0, 5), usedAI, corrected);
     setStatus('');
   } catch (_) {
     setStatus('検索中にエラーが発生しました。もう一度お試しください');
@@ -217,41 +242,86 @@ async function fetchCandidates(keywords, period, sources) {
     .map(({ item }) => item);
 }
 
-async function fetchBookmarks(keywords) {
+function fetchBookmarks(keywords) {
+  return filterByKeywords(bookmarkCache, keywords)
+    .map(item => ({ ...item, _source: 'bookmark' }));
+}
+
+function fetchHistory(keywords) {
+  return filterByKeywords(historyCache, keywords)
+    .map(item => ({ ...item, _source: 'history' }));
+}
+
+// ── Translator API helper ─────────────────────────────────────────────────────
+/**
+ * Translate text using the Chrome built-in Translator API.
+ * Returns the translated string on success, null if unavailable or fails.
+ *
+ * @param {string} text
+ * @param {'ja'|'en'} sourceLang
+ * @param {'ja'|'en'} targetLang
+ * @returns {Promise<string|null>}
+ */
+async function translateQuery(text, sourceLang, targetLang) {
+  const TranslatorAPI = globalThis['Translator'];
+  if (!TranslatorAPI) return null;
   try {
-    const results = await Promise.all(
-      keywords.map(kw => chrome.bookmarks.search(kw))
-    );
-    return results.flat().map(item => ({ ...item, _source: 'bookmark' }));
-  } catch (_) {
-    return [];
+    const availability = await TranslatorAPI.availability({ sourceLanguage: sourceLang, targetLanguage: targetLang });
+    if (availability === 'unavailable') return null;
+
+    const translator = await TranslatorAPI.create({ sourceLanguage: sourceLang, targetLanguage: targetLang });
+    const result = await translator.translate(text.slice(0, 200));
+    translator.destroy();
+    console.debug(`[VoiceMarkets] Translator ${sourceLang}→${targetLang}:`, result);
+    return result || null;
+  } catch (e) {
+    console.debug('[VoiceMarkets] translateQuery failed:', e);
+    return null;
   }
 }
 
-async function fetchHistory(keywords) {
-  try {
-    // Fetch ALL history — chrome.history.search text filter is broken for Japanese
-    const items = await chrome.history.search({
-      text: '',
-      maxResults: 1000,
-      startTime: 0,
-    });
-    return filterByKeywords(items, keywords).map(item => ({ ...item, _source: 'history' }));
-  } catch (_) {
-    return [];
+/**
+ * Extract keywords from a transcript in both its original language and the opposite language.
+ * Falls back to single-language extraction if Translator API is unavailable.
+ *
+ * @param {string} transcript
+ * @returns {Promise<string[]>}
+ */
+async function extractKeywordsBilingual(transcript) {
+  const original = extractKeywords(transcript);
+
+  const hasCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(transcript);
+  const translated = await translateQuery(
+    transcript,
+    hasCJK ? 'ja' : 'en',
+    hasCJK ? 'en' : 'ja',
+  );
+
+  if (!translated) return original;
+
+  const fromTranslation = extractKeywords(translated);
+  // Merge, deduplicate, preserve original-language terms first
+  const merged = [...original];
+  for (const kw of fromTranslation) {
+    if (!merged.includes(kw)) merged.push(kw);
   }
+  console.debug('[VoiceMarkets] bilingual keywords:', merged);
+  return merged;
 }
 
 // ── Gemini Nano (Stage 0) — Intent parsing ────────────────────────────────────
 /**
- * Parse search intent from a voice transcript using Gemini Nano.
- * Returns { period, keywords, sources } on success, null if unavailable or fails.
+ * Parse search intent from voice recognition alternatives using Gemini Nano.
+ * Returns { selected, period, keywords, sources } on success, null if unavailable or fails.
  *
+ * selected: number — 1-based index of the best alternative chosen by AI
  * period:   'all' | '1h' | '24h' | '1w' | '1m' | '1y'
  * keywords: string[] — expanded keyword variants (multilingual, spelling variations)
  * sources:  ('bookmarks' | 'history')[]
+ *
+ * @param {Array<{transcript: string, confidence: number}>} alternatives
  */
-async function parseIntent(transcript, onStatus = () => {}) {
+async function parseIntent(alternatives, onStatus = () => {}) {
   if (typeof LanguageModel === 'undefined') return null;
 
   try {
@@ -267,42 +337,54 @@ async function parseIntent(transcript, onStatus = () => {}) {
 
     onStatus('AIモデルを読み込み中…');
     const systemPrompt = [
-      'You are a search keyword expander for a browser history/bookmark search tool.',
+      'You are a multilingual search keyword expander for a browser bookmark/history search tool.',
+      'Bookmarks have titles in Japanese, English, or both.',
+      'Generate keywords in BOTH languages so the search matches regardless of how the page was titled.',
+      '',
+      '## selected',
+      'Pick the most natural-sounding speech-recognition alternative (1-based index).',
       '',
       '## period',
-      'Detect the time range from the query:',
+      'Detect time range from the chosen alternative:',
       '  "直近" "さっき" "今さっき" → 1h',
       '  "今日" "今朝" "昨日" "最近" → 24h',
-      '  "今週" "先週" → 1w',
-      '  "今月" → 1m',
-      '  "今年" → 1y',
-      '  no time expression → all',
+      '  "今週" "先週" → 1w | "今月" → 1m | "今年" → 1y | otherwise → all',
       '',
       '## keywords',
-      'Steps (ALWAYS follow all steps):',
-      '1. Extract core topic words; drop time/source words (今日,履歴,ブックマーク,見た,お気に入り,etc.)',
-      '2. For EVERY katakana word, generate its romaji by sounding out each mora:',
-      '   "オープンクローズ" → "opunkurozu"  "ギットハブ" → "gittohab"  "リアクト" → "riakuto"',
-      '3. For EVERY katakana word, guess the English brand/product name it likely transcribes:',
-      '   "オープンクローズ" → try "openclaw","open claw","open close"',
-      '   "ツイッター" → "twitter"  "ユーチューブ" → "youtube"  "ギットハブ" → "github"',
-      '   "リアクト" → "react"  "ネクスト" → "next"  "タイプスクリプト" → "typescript"',
-      '4. Add English ↔ Japanese translations (e.g. "ニュース" → add "news")',
-      '5. Add abbreviations/full forms (e.g. "AI" → add "artificial intelligence")',
-      'Return ALL generated forms as a flat string array. Max 10 items.',
+      'For every topic concept in the query, generate ALL of the following variants:',
+      '1. Drop stop/meta words: の,を,に,は,た,こと,見た,今日,履歴,ブックマーク,お気に入り,検索,開いた',
+      '2. Original surface form (e.g. "ニュース", "react")',
+      '3. English equivalent for Japanese ("ニュース"→"news", "設定"→"settings", "入門"→"introduction", "機械学習"→"machine learning")',
+      '4. Japanese/katakana equivalent for English ("news"→"ニュース", "settings"→"設定", "react"→"リアクト")',
+      '5. Resolve katakana to actual English brand/product name:',
+      '   "ギットハブ"→"github" | "リアクト"→"react" | "タイプスクリプト"→"typescript"',
+      '   "ツイッター"→"twitter" | "ユーチューブ"→"youtube" | "ネクスト"→"nextjs"',
+      '   "パイソン"→"python" | "ドッカー"→"docker" | "クロード"→"claude" | "オープンエーアイ"→"openai"',
+      '6. Common abbreviations and expansions: "JS"↔"javascript", "TS"↔"typescript", "AI"↔"artificial intelligence", "ML"↔"machine learning"',
+      '7. Related sub-terms: e.g. "react" → also add "jsx", "component", "hook"; "docker" → "container", "compose"',
+      '8. Spelling variants and common typos that a speech recognizer might produce',
+      'Target 20 items. Always include both Japanese and English forms for every concept.',
       '',
       '## sources',
-      '["bookmarks"] if user says bookmark/お気に入り/ブックマーク.',
-      '["history"] if user says 履歴/見た/visited/閲覧.',
+      '["bookmarks"] if user says お気に入り/ブックマーク/bookmark/favorite.',
+      '["history"] if user says 履歴/見た/visited/閲覧/browsed.',
       '["bookmarks","history"] otherwise.',
       ...(bookmarkDictionary.length > 0 ? [
         '',
-        '## known terms from user\'s bookmarks',
-        'If a spoken word sounds like one of these, prefer it as the corrected spelling:',
+        '## known terms from user\'s bookmarks (prefer these spellings when a spoken word sounds similar)',
         bookmarkDictionary.slice(0, 60).join(', '),
       ] : []),
     ].join('\n');
     console.debug('[VoiceMarkets] parseIntent systemPrompt:\n', systemPrompt);
+
+    // Try Translator API to get a translation hint for the primary alternative
+    const primaryText = alternatives[0].transcript;
+    const hasCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(primaryText);
+    const translationHint = await translateQuery(
+      primaryText,
+      hasCJK ? 'ja' : 'en',
+      hasCJK ? 'en' : 'ja',
+    );
 
     const session = await Promise.race([
       LanguageModel.create({
@@ -316,15 +398,22 @@ async function parseIntent(transcript, onStatus = () => {}) {
     const schema = {
       type: 'object',
       properties: {
+        selected: { type: 'number' },
         period:   { type: 'string', enum: ['all', '1h', '24h', '1w', '1m', '1y'] },
-        keywords: { type: 'array', items: { type: 'string' }, maxItems: 10 },
+        keywords: { type: 'array', items: { type: 'string' }, minIndex: 5, maxItems: 20 },
         sources:  { type: 'array', items: { type: 'string', enum: ['bookmarks', 'history'] } },
       },
-      required: ['period', 'keywords', 'sources'],
+      required: ['selected', 'period', 'keywords', 'sources'],
     };
 
     onStatus('クエリを解析中…');
-    const intentPrompt = `Query: "${transcript.slice(0, 100)}"`;
+    const altLines = alternatives
+      .map((a, i) => `${i + 1}. "${a.transcript.slice(0, 80)}" (confidence: ${a.confidence.toFixed(2)})`)
+      .join('\n');
+    const translationLine = translationHint
+      ? `\nTranslation (${hasCJK ? 'EN' : 'JA'}) — you MUST include words from this in keywords: "${translationHint}"`
+      : '';
+    const intentPrompt = `Speech recognition alternatives:\n${altLines}${translationLine}`;
     console.debug('[VoiceMarkets] parseIntent prompt:', intentPrompt);
     const response = await Promise.race([
       session.prompt(intentPrompt, { responseConstraint: schema }),
@@ -333,6 +422,18 @@ async function parseIntent(transcript, onStatus = () => {}) {
     session.destroy();
 
     const intent = JSON.parse(response);
+
+    // Guarantee both the original-form and translated-form keywords are present,
+    // regardless of what the AI returned.
+    if (Array.isArray(intent.keywords)) {
+      const origKeywords = extractKeywords(primaryText);
+      const transKeywords = translationHint ? extractKeywords(translationHint) : [];
+      for (const kw of [...origKeywords, ...transKeywords]) {
+        if (!intent.keywords.includes(kw)) intent.keywords.push(kw);
+      }
+      intent.keywords = intent.keywords.slice(0, 20);
+    }
+
     console.debug('[VoiceMarkets] Parsed intent:', intent);
     return intent;
   } catch (e) {
@@ -473,8 +574,9 @@ function createSourceIcon(source) {
 /**
  * @param {Array} items
  * @param {boolean} usedAI - true when Gemini Nano ranking was applied
+ * @param {boolean} corrected - true when AI picked a non-primary recognition alternative
  */
-function renderResults(items, usedAI = false) {
+function renderResults(items, usedAI = false, corrected = false) {
   clearChildren(resultsList);
 
   // Show ranking method badge using safe DOM API (no innerHTML)
@@ -484,6 +586,12 @@ function renderResults(items, usedAI = false) {
   badge.className = usedAI ? 'badge badge-ai' : 'badge badge-keyword';
   badge.textContent = usedAI ? 'AI' : 'キーワード順';
   rankingInfo.appendChild(badge);
+  if (corrected) {
+    const correctedBadge = document.createElement('span');
+    correctedBadge.className = 'badge badge-corrected';
+    correctedBadge.textContent = '補正';
+    rankingInfo.appendChild(correctedBadge);
+  }
   rankingInfo.classList.remove('hidden');
 
   for (const item of items) {
@@ -529,6 +637,7 @@ function renderResults(items, usedAI = false) {
 function hideResults() {
   resultsList.classList.add('hidden');
   rankingInfo.classList.add('hidden');
+  transcriptEl.classList.remove('low-confidence');
   clearChildren(resultsList);
   clearChildren(rankingInfo);
 }
@@ -555,7 +664,10 @@ async function buildBookmarkDictionary() {
 
     function walk(nodes) {
       for (const node of nodes) {
-        if (node.url && node.title) titles.push(node.title);
+        if (node.url && node.title) {
+          titles.push(node.title);
+          bookmarkCache.push(node);
+        }
         if (node.children) walk(node.children);
       }
     }
@@ -563,8 +675,29 @@ async function buildBookmarkDictionary() {
     walk(tree);
     bookmarkDictionary = extractBookmarkKeywords(titles);
     console.debug('[VoiceMarkets] Bookmark dictionary:', bookmarkDictionary.length, 'words');
+    console.debug('[VoiceMarkets] Bookmark cache:', bookmarkCache.length, 'items');
   } catch (e) {
     console.debug('[VoiceMarkets] buildBookmarkDictionary failed:', e);
+  }
+}
+
+// ── History cache ─────────────────────────────────────────────────────────────
+/**
+ * Fetch recent history once at popup startup and store in historyCache.
+ * 90-day window, up to 5 000 items — covers typical browsing without
+ * making the cache unwieldy. fetchHistory() reads from this cache instead
+ * of making a fresh API call on every search.
+ */
+async function buildHistoryCache() {
+  try {
+    historyCache = await chrome.history.search({
+      text: '',
+      maxResults: 5000,
+      startTime: Date.now() - 90 * 86_400_000,
+    });
+    console.debug('[VoiceMarkets] History cache:', historyCache.length, 'items');
+  } catch (e) {
+    console.debug('[VoiceMarkets] buildHistoryCache failed:', e);
   }
 }
 
@@ -624,3 +757,4 @@ transcriptEl.addEventListener('keydown', (e) => {
 
 checkAIAvailability();
 buildBookmarkDictionary();
+buildHistoryCache();

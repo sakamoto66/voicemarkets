@@ -43,11 +43,15 @@ export function extractKeywords(transcript) {
  * Returns 0 if no keywords match (caller should filter these out).
  *
  * Scoring:
- *   +3 per keyword found in title
- *   +1 per keyword found in URL only
+ *   +3 per keyword found in title (weighted by keyword length)
+ *   +1 per keyword found in URL only (weighted by keyword length)
  *   +0–2 recency bonus (history items only, via lastVisitTime)
+ *   +0–2 visit frequency bonus (history items only, via visitCount)
  *
- * @param {{ title?: string, url?: string, lastVisitTime?: number }} item
+ * Keyword length weighting: longer keywords are more specific and score higher.
+ *   len ≤ 2 → ×0.5  |  len 3–4 → ×1  |  len 5–7 → ×1.5  |  len ≥ 8 → ×2
+ *
+ * @param {{ title?: string, url?: string, lastVisitTime?: number, visitCount?: number }} item
  * @param {string[]} keywords
  * @returns {number}
  */
@@ -59,10 +63,11 @@ export function scoreItem(item, keywords) {
 
   let matchScore = 0;
   for (const kw of keywords) {
+    const weight = kw.length <= 2 ? 0.5 : kw.length <= 4 ? 1 : kw.length <= 7 ? 1.5 : 2;
     if (title.includes(kw)) {
-      matchScore += 3;
+      matchScore += 3 * weight;
     } else if (url.includes(kw)) {
-      matchScore += 1;
+      matchScore += 1 * weight;
     }
   }
 
@@ -76,7 +81,13 @@ export function scoreItem(item, keywords) {
     else if (ageDays < 30) recencyScore = 0.5;
   }
 
-  return matchScore + recencyScore;
+  // Visit frequency bonus: log scale so a page visited 100× doesn't dominate over 10×
+  let frequencyScore = 0;
+  if (item.visitCount && item.visitCount > 0) {
+    frequencyScore = Math.min(2, Math.log10(item.visitCount + 1));
+  }
+
+  return matchScore + recencyScore + frequencyScore;
 }
 
 /**
