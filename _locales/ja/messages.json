@@ -1,0 +1,48 @@
+{
+  "app_name":        { "message": "VoiceMarkets" },
+  "app_description": { "message": "音声でブックマーク・履歴を検索して開く Chrome 拡張機能" },
+
+  "mic_btn_label":          { "message": "音声入力開始" },
+  "status_idle":            { "message": "クリックして話す" },
+  "transcript_placeholder": { "message": "認識結果を編集してEnterで再検索" },
+  "transcript_aria_label":  { "message": "認識テキスト（編集可能）" },
+
+  "filter_period_label":    { "message": "期間" },
+  "period_filter_aria":     { "message": "期間フィルター" },
+  "period_all":             { "message": "全期間" },
+  "period_1h":              { "message": "1時間" },
+  "period_24h":             { "message": "24時間" },
+  "period_1w":              { "message": "1週間" },
+  "period_1m":              { "message": "1ヶ月" },
+  "period_1y":              { "message": "1年" },
+
+  "filter_source_label":    { "message": "検索先" },
+  "source_filter_aria":     { "message": "検索先の選択" },
+  "source_bookmarks":       { "message": "ブックマーク" },
+  "source_history":         { "message": "履歴" },
+
+  "result_count": {
+    "message": "$COUNT$件",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "badge_keyword":   { "message": "キーワード順" },
+  "badge_corrected": { "message": "補正" },
+
+  "error_no_speech_api":  { "message": "このブラウザは音声認識に対応していません" },
+  "status_listening":     { "message": "聞いています…" },
+  "error_mic_permission": { "message": "マイク許可が必要です。chrome://settings/content/microphone で許可してください" },
+  "error_no_speech":      { "message": "音声が検出されませんでした。もう一度試してください" },
+  "error_speech_recognition": {
+    "message": "音声認識エラー: $ERROR$",
+    "placeholders": { "error": { "content": "$1" } }
+  },
+  "error_start_failed":   { "message": "音声認識を開始できませんでした" },
+
+  "status_loading_ai":    { "message": "AIモデルを読み込み中…" },
+  "status_parsing_query": { "message": "クエリを解析中…" },
+  "error_no_recognition": { "message": "認識できませんでした。もう一度お試しください" },
+  "error_no_sources":     { "message": "検索先を選択してください" },
+  "status_searching":     { "message": "検索中…" },
+  "error_no_results":     { "message": "一致するページが見つかりませんでした" },
+  "error_search_failed":  { "message": "検索中にエラーが発生しました。もう一度お試しください" }
+}
