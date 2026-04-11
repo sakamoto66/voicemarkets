@@ -170,6 +170,15 @@ export function extractBookmarkKeywords(titles) {
  * @param {string} text
  * @returns {Array|null} parsed array, or null on any failure
  */
+/**
+ * Returns true if the text contains CJK characters (Japanese/Chinese/katakana/fullwidth).
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function hasCJKText(text) {
+  return /[\u3000-\u9fff\uff00-\uffef]/.test(text);
+}
+
 export function parseAIResponse(text) {
   if (!text || typeof text !== 'string') return null;
 

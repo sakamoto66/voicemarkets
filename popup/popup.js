@@ -5,7 +5,7 @@
  * Phase 3: Gemini Nano semantic ranking (when available)
  */
 
-import { extractKeywords, scoreItem, filterByKeywords, getPeriodStartTime, extractBookmarkKeywords } from './search.js';
+import { extractKeywords, scoreItem, filterByKeywords, getPeriodStartTime, extractBookmarkKeywords, hasCJKText } from './search.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const micBtn        = document.getElementById('micBtn');
@@ -280,6 +280,13 @@ async function translateQuery(text, sourceLang, targetLang) {
   }
 }
 
+/** Translate text to the opposite language (ja↔en), auto-detecting source. */
+function translateToOppositeLanguage(text) {
+  return hasCJKText(text)
+    ? translateQuery(text, 'ja', 'en')
+    : translateQuery(text, 'en', 'ja');
+}
+
 /**
  * Extract keywords from a transcript in both its original language and the opposite language.
  * Falls back to single-language extraction if Translator API is unavailable.
@@ -289,22 +296,11 @@ async function translateQuery(text, sourceLang, targetLang) {
  */
 async function extractKeywordsBilingual(transcript) {
   const original = extractKeywords(transcript);
-
-  const hasCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(transcript);
-  const translated = await translateQuery(
-    transcript,
-    hasCJK ? 'ja' : 'en',
-    hasCJK ? 'en' : 'ja',
-  );
-
+  const translated = await translateToOppositeLanguage(transcript);
   if (!translated) return original;
 
   const fromTranslation = extractKeywords(translated);
-  // Merge, deduplicate, preserve original-language terms first
-  const merged = [...original];
-  for (const kw of fromTranslation) {
-    if (!merged.includes(kw)) merged.push(kw);
-  }
+  const merged = [...new Set([...original, ...fromTranslation])];
   console.debug('[VoiceMarkets] bilingual keywords:', merged);
   return merged;
 }
@@ -377,14 +373,8 @@ async function parseIntent(alternatives, onStatus = () => {}) {
     ].join('\n');
     console.debug('[VoiceMarkets] parseIntent systemPrompt:\n', systemPrompt);
 
-    // Try Translator API to get a translation hint for the primary alternative
     const primaryText = alternatives[0].transcript;
-    const hasCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(primaryText);
-    const translationHint = await translateQuery(
-      primaryText,
-      hasCJK ? 'ja' : 'en',
-      hasCJK ? 'en' : 'ja',
-    );
+    const translationHint = await translateToOppositeLanguage(primaryText);
 
     const session = await Promise.race([
       LanguageModel.create({
@@ -411,7 +401,7 @@ async function parseIntent(alternatives, onStatus = () => {}) {
       .map((a, i) => `${i + 1}. "${a.transcript.slice(0, 80)}" (confidence: ${a.confidence.toFixed(2)})`)
       .join('\n');
     const translationLine = translationHint
-      ? `\nTranslation (${hasCJK ? 'EN' : 'JA'}) — you MUST include words from this in keywords: "${translationHint}"`
+      ? `\nTranslation (${hasCJKText(primaryText) ? 'EN' : 'JA'}) — you MUST include words from this in keywords: "${translationHint}"`
       : '';
     const intentPrompt = `Speech recognition alternatives:\n${altLines}${translationLine}`;
     console.debug('[VoiceMarkets] parseIntent prompt:', intentPrompt);
@@ -423,15 +413,12 @@ async function parseIntent(alternatives, onStatus = () => {}) {
 
     const intent = JSON.parse(response);
 
-    // Guarantee both the original-form and translated-form keywords are present,
-    // regardless of what the AI returned.
     if (Array.isArray(intent.keywords)) {
-      const origKeywords = extractKeywords(primaryText);
-      const transKeywords = translationHint ? extractKeywords(translationHint) : [];
-      for (const kw of [...origKeywords, ...transKeywords]) {
-        if (!intent.keywords.includes(kw)) intent.keywords.push(kw);
-      }
-      intent.keywords = intent.keywords.slice(0, 20);
+      const extra = [
+        ...extractKeywords(primaryText),
+        ...(translationHint ? extractKeywords(translationHint) : []),
+      ];
+      intent.keywords = [...new Set([...intent.keywords, ...extra])].slice(0, 20);
     }
 
     console.debug('[VoiceMarkets] Parsed intent:', intent);
