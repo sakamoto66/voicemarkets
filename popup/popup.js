@@ -30,6 +30,9 @@ function initRecognition() {
   r.maxAlternatives = 1;
   r.continuous = false;
 
+  // Track whether onerror already set a status so onend doesn't overwrite it.
+  let errorOccurred = false;
+
   r.onstart = () => {
     isListening = true;
     micBtn.classList.add('listening');
@@ -50,18 +53,24 @@ function initRecognition() {
   };
 
   r.onerror = (event) => {
-    stopListening();
+    errorOccurred = true;
+    isListening = false;
+    micBtn.classList.remove('listening');
+
     if (event.error === 'not-allowed') {
-      setStatus('マイクへのアクセスが拒否されました', true);
+      setStatus('マイク許可が必要です。chrome://settings/content/microphone で許可してください', true);
     } else if (event.error === 'no-speech') {
       setStatus('音声が検出されませんでした。もう一度試してください');
     } else {
-      setStatus(`エラー: ${event.error}`);
+      setStatus(`音声認識エラー: ${event.error}`, true);
     }
   };
 
   r.onend = () => {
-    stopListening();
+    // If onerror already displayed a message, don't overwrite it.
+    if (!errorOccurred) {
+      stopListening();
+    }
   };
 
   return r;
@@ -97,11 +106,6 @@ function stopListening() {
     // already stopped — ignore
   }
 }
-
-// Stop recognition when popup loses focus (Web Speech API gets interrupted anyway)
-window.onblur = () => {
-  if (isListening) stopListening();
-};
 
 // ── Search pipeline ───────────────────────────────────────────────────────────
 async function runSearch(transcript) {
