@@ -96,6 +96,63 @@ export function filterByKeywords(items, keywords) {
 }
 
 /**
+ * Get the start timestamp for a period filter.
+ * Returns 0 for 'all' (no filter).
+ *
+ * @param {string} period - 'all' | '1h' | '24h' | '1w' | '1m' | '1y'
+ * @returns {number} millisecond timestamp (0 = no filter)
+ */
+export function getPeriodStartTime(period) {
+  if (!period || period === 'all') return 0;
+  const durations = {
+    '1h':  3_600_000,
+    '24h': 86_400_000,
+    '1w':  7 * 86_400_000,
+    '1m':  30 * 86_400_000,
+    '1y':  365 * 86_400_000,
+  };
+  const ms = durations[period];
+  return ms !== undefined ? Date.now() - ms : 0;
+}
+
+/**
+ * Extract significant keywords from bookmark titles to build a correction dictionary.
+ * Keeps English words, katakana sequences, and kanji compounds — the kinds of terms
+ * most likely to be misrecognized by speech input.
+ * Returns unique words sorted by frequency (most common first), capped at 100.
+ *
+ * @param {string[]} titles - Array of bookmark title strings
+ * @returns {string[]}
+ */
+export function extractBookmarkKeywords(titles) {
+  const freq = new Map();
+
+  for (const title of titles) {
+    if (!title) continue;
+
+    const words = title
+      .replace(/[|／｜_:：\[\]【】「」『』()（）・…]/g, ' ')
+      .split(/[\s\-\/]+/)
+      .filter(Boolean);
+
+    for (const word of words) {
+      const isEnglish  = /^[a-zA-Z][a-zA-Z0-9.]{1,}$/.test(word);  // 2+ chars, starts with letter
+      const isKatakana = /^[\u30A0-\u30FF]{3,}$/.test(word);         // 3+ katakana chars
+      const isKanji    = /^[\u4E00-\u9FFF]{2,}$/.test(word);         // 2+ kanji chars
+
+      if (isEnglish || isKatakana || isKanji) {
+        freq.set(word, (freq.get(word) || 0) + 1);
+      }
+    }
+  }
+
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 100);
+}
+
+/**
  * Parse Gemini Nano AI response, stripping markdown code fences before parsing.
  * Always wrap in try/catch — the model does not guarantee valid JSON.
  *
