@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "__MSG_app_description__",
   "default_locale": "ja",
-  "permissions": ["bookmarks", "history", "tabs"],
+  "permissions": ["bookmarks", "history", "tabs", "storage"],
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "VoiceMarkets",

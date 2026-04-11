@@ -158,7 +158,10 @@ async function runSearch(input) {
     const aiResult = await rankWithAI(candidates, bestTranscript);
     const ranked   = aiResult ?? candidates;
 
-    renderResults(resultsList, rankingInfo, ranked.slice(0, 5), aiResult !== null, corrected);
+    const displayItems = ranked.slice(0, 5);
+    const usedAI = aiResult !== null;
+    renderResults(resultsList, rankingInfo, displayItems, usedAI, corrected);
+    saveSearchState(displayItems, bestTranscript, usedAI, corrected);
     status('');
   } catch (_) {
     status(t('error_search_failed'));
@@ -277,9 +280,25 @@ transcriptEl.addEventListener('keydown', (e) => {
   }
 });
 
+// ── Search state persistence ──────────────────────────────────────────────────
+const STORAGE_KEY = 'lastSearch';
+
+function saveSearchState(items, transcript, usedAI, corrected) {
+  chrome.storage.session.set({ [STORAGE_KEY]: { items, transcript, usedAI, corrected } });
+}
+
+async function restoreSearchState() {
+  const result = await chrome.storage.session.get(STORAGE_KEY);
+  const saved = result[STORAGE_KEY];
+  if (!saved?.items?.length) return;
+  transcriptEl.value = saved.transcript ?? '';
+  renderResults(resultsList, rankingInfo, saved.items, saved.usedAI, saved.corrected);
+}
+
 // ── Startup ───────────────────────────────────────────────────────────────────
 applyI18n();
 checkAIAvailability();
+restoreSearchState();
 
 Promise.all([
   buildBookmarkDictionary(),

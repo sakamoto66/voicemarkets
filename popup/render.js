@@ -72,7 +72,26 @@ export function renderResults(resultsList, rankingInfo, items, usedAI = false, c
     a.rel       = 'noopener noreferrer';
     a.tabIndex  = 0;
 
-    const openItem = () => chrome.tabs.create({ url: item.url });
+    const openItem = async () => {
+      // 既に開いているタブがあればそこへ切り替える
+      const allTabs = await chrome.tabs.query({});
+      const existingTab = allTabs.find(tab => tab.url === item.url);
+      if (existingTab) {
+        await chrome.tabs.update(existingTab.id, { active: true });
+        await chrome.windows.update(existingTab.windowId, { focused: true });
+        return;
+      }
+
+      // 現在のタブがホームページ（新しいタブ）ならそこで開く
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab && (activeTab.url === 'chrome://newtab/' || activeTab.url === 'about:newtab')) {
+        await chrome.tabs.update(activeTab.id, { url: item.url });
+        return;
+      }
+
+      // 新しいタブで開く
+      await chrome.tabs.create({ url: item.url });
+    };
     a.addEventListener('click', (e) => { e.preventDefault(); openItem(); });
     a.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openItem(); }
