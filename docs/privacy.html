@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoiceMarkets — Privacy Policy</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      color: #1a1a1a;
+      line-height: 1.7;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25em; }
+    h2 { font-size: 1.2rem; margin-top: 2em; }
+    .subtitle { color: #666; margin-bottom: 2em; }
+    a { color: #0066cc; }
+    hr { border: none; border-top: 1px solid #e0e0e0; margin: 2em 0; }
+    .lang-toggle { margin-bottom: 2em; }
+    .lang-toggle a { margin-right: 1em; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<h1>VoiceMarkets</h1>
+<p class="subtitle">Privacy Policy — Last updated: 2026-04-12</p>
+
+<div class="lang-toggle">
+  <a href="#ja">日本語</a>
+  <a href="#en">English</a>
+</div>
+
+<hr id="ja">
+
+<h2>プライバシーポリシー（日本語）</h2>
+
+<p>
+VoiceMarkets（以下「本拡張機能」）は、あなたのブックマークおよびブラウザ履歴を音声で検索するための Chrome 拡張機能です。
+本ポリシーは、本拡張機能がどのようにデータを扱うかを説明します。
+</p>
+
+<h2>収集・送信するデータ</h2>
+
+<p>
+本拡張機能は、あなたのブックマークや閲覧履歴を<strong>外部サーバーに送信しません</strong>。
+これらのデータはすべてブラウザ内で処理されます。
+</p>
+
+<p>
+音声認識には Chrome の <strong>Web Speech API</strong> を使用しています。
+音声データは Google のサーバーに送信されて文字起こしされますが、これは Chrome ブラウザ標準の音声入力と同じ仕組みです。
+本拡張機能自身のサーバーには何も送信されません。
+</p>
+
+<p>
+Gemini Nano によるセマンティックランキングは、<strong>デバイス上で完結</strong>します。
+候補ページのタイトル・URL・音声テキストが Gemini Nano モデルに渡されますが、このモデルは Chrome に組み込まれており、外部ネットワーク通信は行われません。
+</p>
+
+<h2>第三者への提供</h2>
+
+<p>本拡張機能は、あなたのデータを第三者に販売・共有・提供することはありません。</p>
+
+<h2>お問い合わせ</h2>
+
+<p>
+ご質問は <a href="https://github.com/sakamoto66/voicemarkets/issues">GitHub Issues</a> までお寄せください。
+</p>
+
+<hr id="en">
+
+<h2>Privacy Policy (English)</h2>
+
+<p>
+VoiceMarkets is a Chrome extension that lets you search your bookmarks and browser history by voice.
+This policy explains how the extension handles your data.
+</p>
+
+<h2>Data collected and transmitted</h2>
+
+<p>
+VoiceMarkets does <strong>not</strong> transmit your bookmarks or browsing history to any external server.
+All data is processed locally within your browser.
+</p>
+
+<p>
+Voice recognition uses Chrome's <strong>Web Speech API</strong>. Your voice audio is sent to Google's
+servers for transcription — this is the same mechanism used by Chrome's built-in speech input.
+No audio or transcription data is sent to any server operated by this extension.
+</p>
+
+<p>
+Semantic ranking via Gemini Nano runs <strong>entirely on-device</strong>. Candidate page titles,
+URLs, and the transcribed voice query are passed to the Gemini Nano model built into Chrome.
+No network request is made for this step.
+</p>
+
+<h2>Third parties</h2>
+
+<p>This extension does not sell, share, or disclose your data to any third party.</p>
+
+<h2>Contact</h2>
+
+<p>
+Questions? Open an issue at <a href="https://github.com/sakamoto66/voicemarkets/issues">GitHub Issues</a>.
+</p>
+
+</body>
+</html>
