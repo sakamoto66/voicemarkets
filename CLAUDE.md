@@ -57,10 +57,10 @@ Unit-testable functions: `scoreItem(item, keywords)`, `extractKeywords(transcrip
 
 ## Current Implementation Status
 
-- **Phase 1** (Voice input scaffold): Not started
-- **Phase 2** (Search + keyword ranking): Not started
-- **Phase 3** (Gemini Nano ranking): Blocked on Phase 2; token budget measurement required before ship
-- **Phase 4** (Error UX): Error states to specify before implementation — mic denied (NotAllowedError), silence timeout, zero results, AI JSON parse failure
+- **Phase 1** (Voice input scaffold): **Done** — Web Speech API, ja-JP, pulse animation
+- **Phase 2** (Search + keyword ranking): **Done** — bookmark + history fetch, dedup, score, top-20
+- **Phase 3** (Gemini Nano ranking): **Done** — rankWithAI with silent fallback; token budget logged via console.debug (manual measurement still pending with real data)
+- **Phase 4** (Error UX): **Done** — all error states defined; AI/keyword badge shown in results footer
 
 ## manifest.json Key Fields
 

@@ -103,6 +103,38 @@ body {
   font-style: italic;
 }
 
+/* ── Ranking info ── */
+.ranking-info {
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: right;
+  padding: 4px 2px 0;
+}
+
+.ranking-info.hidden {
+  display: none;
+}
+
+.ranking-info .badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.ranking-info .badge-ai {
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.ranking-info .badge-keyword {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
 /* ── Results ── */
 .results {
   list-style: none;

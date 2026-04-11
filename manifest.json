@@ -5,6 +5,7 @@
   "description": "音声でブックマーク・履歴を検索して開く Chrome 拡張機能",
   "permissions": ["bookmarks", "history", "tabs"],
   "action": {
+    "default_popup": "popup/popup.html",
     "default_title": "VoiceMarkets",
     "default_icon": {
       "16": "icons/icon16.png",

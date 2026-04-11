@@ -12,6 +12,7 @@ const micBtn       = document.getElementById('micBtn');
 const statusEl     = document.getElementById('status');
 const transcriptEl = document.getElementById('transcript');
 const resultsList  = document.getElementById('results');
+const rankingInfo  = document.getElementById('ranking-info');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let recognition = null;
@@ -112,7 +113,7 @@ async function runSearch(transcript) {
   const keywords = extractKeywords(transcript);
 
   if (keywords.length === 0) {
-    setStatus('キーワードが見つかりませんでした');
+    setStatus('認識できませんでした。もう一度お試しください');
     return;
   }
 
@@ -122,17 +123,19 @@ async function runSearch(transcript) {
     const candidates = await fetchCandidates(keywords);
 
     if (candidates.length === 0) {
-      setStatus('結果が見つかりませんでした');
+      setStatus('一致するページが見つかりませんでした');
       return;
     }
 
-    // Stage 2: Try Gemini Nano ranking, fall back to Stage 1 order silently
-    const ranked = await rankWithAI(candidates, transcript) ?? candidates;
+    // Stage 2: Try Gemini Nano ranking, fall back to Stage 1 keyword order silently
+    const aiResult = await rankWithAI(candidates, transcript);
+    const ranked = aiResult ?? candidates;
+    const usedAI = aiResult !== null;
 
-    renderResults(ranked.slice(0, 5));
+    renderResults(ranked.slice(0, 5), usedAI);
     setStatus('');
   } catch (_) {
-    setStatus('検索中にエラーが発生しました');
+    setStatus('検索中にエラーが発生しました。もう一度お試しください');
   }
 }
 
@@ -191,40 +194,89 @@ async function fetchHistory(keywords) {
 }
 
 // ── Gemini Nano (Stage 2) ─────────────────────────────────────────────────────
+/**
+ * Rank candidates using Gemini Nano.
+ * Returns ranked array on success, null if AI is unavailable or fails.
+ * Caller uses null to distinguish "AI used" from "AI skipped/failed".
+ */
 async function rankWithAI(candidates, transcript) {
-  if (!window.ai?.languageModel) return null;
+  if (typeof LanguageModel === 'undefined') return null;
 
   try {
-    const session = await window.ai.languageModel.create({
-      systemPrompt:
-        'You are a browser history search assistant. Given a voice query and a list of browser items, return a JSON array of the most relevant items sorted by relevance. Include only items from the input list. Output ONLY a JSON array with objects containing "title", "url", and "score" (0–10).',
+    const availability = await LanguageModel.availability({
+      expectedInputLanguages: ['ja', 'en'],
+      expectedOutputLanguages: ['en'],
     });
+    if (availability !== 'available') {
+      console.debug('[VoiceMarkets] LanguageModel not available:', availability);
+      return null;
+    }
 
-    const itemList = candidates
-      .map((item, i) => `${i + 1}. ${item.title || '(no title)'} — ${item.url}`)
+    const makeTimeout = (ms) => new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('AI timeout')), ms)
+    );
+
+    const session = await Promise.race([
+      LanguageModel.create({
+
+        systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
+        expectedInputLanguages: ['ja', 'en'],
+        expectedOutputLanguages: ['en'],
+      }),
+      makeTimeout(30000),
+    ]);
+
+    // Use top 5 candidates only to keep prompt short for Gemini Nano
+    const top = candidates.slice(0, 5);
+    const itemList = top
+      .map((item, i) => `${i + 1}. ${(item.title || '').slice(0, 40)}`)
       .join('\n');
 
-    const prompt = `Voice query: "${transcript}"\n\nItems:\n${itemList}\n\nReturn top 5 as JSON array.`;
+    const prompt = `Query:"${transcript.slice(0, 50)}"\nItems:\n${itemList}\nReturn JSON:[{i,score}] i=item number,score=0-10`;
 
-    const response = await session.prompt(prompt);
+    // Phase 3: log estimated payload size for token budget measurement
+    console.debug('[VoiceMarkets] AI prompt length (chars):', prompt.length, '| candidates:', candidates.length);
+
+    const response = await Promise.race([session.prompt(prompt), makeTimeout(30000)]);
     session.destroy();
 
+    console.debug('[VoiceMarkets] AI raw response:', response);
+
     const parsed = parseAIResponse(response);
+    console.debug('[VoiceMarkets] AI parsed:', parsed);
     if (!parsed) return null;
 
-    // Map AI results back to original candidate objects by URL
-    const byUrl = Object.fromEntries(candidates.map(c => [c.url, c]));
-    return parsed
-      .filter(r => r.url && byUrl[r.url])
-      .map(r => byUrl[r.url]);
+    // Map AI results back to candidates by index (i) or URL
+    const ranked = parsed
+      .filter(r => r.i != null ? top[r.i - 1] : r.url && top.find(c => c.url === r.url))
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .map(r => r.i != null ? top[r.i - 1] : top.find(c => c.url === r.url))
+      .filter(Boolean);
+
+    console.debug('[VoiceMarkets] AI ranked count:', ranked.length);
+    return ranked.length > 0 ? ranked : null;
   } catch (_) {
+    console.debug('[VoiceMarkets] rankWithAI failed:', _);
     return null;
   }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
-function renderResults(items) {
+/**
+ * @param {Array} items
+ * @param {boolean} usedAI - true when Gemini Nano ranking was applied
+ */
+function renderResults(items, usedAI = false) {
   clearChildren(resultsList);
+
+  // Show ranking method badge using safe DOM API (no innerHTML)
+  clearChildren(rankingInfo);
+  rankingInfo.appendChild(document.createTextNode(`${items.length}件`));
+  const badge = document.createElement('span');
+  badge.className = usedAI ? 'badge badge-ai' : 'badge badge-keyword';
+  badge.textContent = usedAI ? 'AI' : 'キーワード順';
+  rankingInfo.appendChild(badge);
+  rankingInfo.classList.remove('hidden');
 
   for (const item of items) {
     const li = document.createElement('li');
@@ -263,7 +315,9 @@ function renderResults(items) {
 
 function hideResults() {
   resultsList.classList.add('hidden');
+  rankingInfo.classList.add('hidden');
   clearChildren(resultsList);
+  clearChildren(rankingInfo);
 }
 
 /** Remove all child nodes without using innerHTML. */
@@ -276,6 +330,20 @@ function setStatus(text, isError = false) {
   statusEl.style.color = isError ? '#ef4444' : '';
 }
 
+// ── Gemini Nano availability check ───────────────────────────────────────────
+async function checkAIAvailability() {
+  if (typeof LanguageModel === 'undefined') {
+    console.debug('[VoiceMarkets] LanguageModel unavailable — キーワード順で動作します');
+    return;
+  }
+  try {
+    const availability = await LanguageModel.availability({ expectedInputLanguages: ['ja', 'en'], expectedOutputLanguages: ['en'] });
+    console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
+  } catch (e) {
+    console.debug('[VoiceMarkets] Gemini Nano capability check failed:', e);
+  }
+}
+
 // ── Event listeners ───────────────────────────────────────────────────────────
 micBtn.addEventListener('click', () => {
   if (isListening) {
@@ -284,3 +352,5 @@ micBtn.addEventListener('click', () => {
     startListening();
   }
 });
+
+checkAIAvailability();
