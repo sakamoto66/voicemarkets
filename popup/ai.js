@@ -99,7 +99,8 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const primaryText     = alternatives[0].transcript;
     const translationHint = await translateToOppositeLanguage(primaryText);
 
-    const session = await Promise.race([
+    let session;
+    session = await Promise.race([
       LanguageModel.create({
         systemPrompt,
         expectedInputLanguages: ['ja', 'en'],
@@ -113,7 +114,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
       properties: {
         selected: { type: 'number' },
         period:   { type: 'string', enum: ['all', '1h', '24h', '1w', '1m', '1y'] },
-        keywords: { type: 'array', items: { type: 'string' }, minIndex: 5, maxItems: 20 },
+        keywords: { type: 'array', items: { type: 'string' }, minItems: 5, maxItems: 20 },
         sources:  { type: 'array', items: { type: 'string', enum: ['bookmarks', 'history'] } },
       },
       required: ['selected', 'period', 'keywords', 'sources'],
@@ -129,11 +130,15 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const intentPrompt = `Speech recognition alternatives:\n${altLines}${translationLine}`;
     console.debug('[VoiceMarkets] parseIntent prompt:', intentPrompt);
 
-    const response = await Promise.race([
-      session.prompt(intentPrompt, { responseConstraint: schema }),
-      makeTimeout(60000),
-    ]);
-    session.destroy();
+    let response;
+    try {
+      response = await Promise.race([
+        session.prompt(intentPrompt, { responseConstraint: schema }),
+        makeTimeout(60000),
+      ]);
+    } finally {
+      session.destroy();
+    }
 
     const intent = JSON.parse(response);
 
@@ -219,7 +224,8 @@ export async function rankWithAI(candidates, transcript) {
       return null;
     }
 
-    const session = await Promise.race([
+    let session;
+    session = await Promise.race([
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
         expectedInputLanguages: ['ja', 'en'],
@@ -247,11 +253,15 @@ export async function rankWithAI(candidates, transcript) {
       },
     };
 
-    const response = await Promise.race([
-      session.prompt(prompt, { responseConstraint }),
-      makeTimeout(30000, 'AI timeout'),
-    ]);
-    session.destroy();
+    let response;
+    try {
+      response = await Promise.race([
+        session.prompt(prompt, { responseConstraint }),
+        makeTimeout(30000, 'AI timeout'),
+      ]);
+    } finally {
+      session.destroy();
+    }
 
     console.debug('[VoiceMarkets] AI raw response:', response);
 
