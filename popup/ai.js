@@ -18,6 +18,12 @@ import { t } from './i18n.js';
 const makeTimeout = (ms, label = 'timeout') =>
   new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms));
 
+const SUPPORTED_OUTPUT_LANGS = ['en', 'es', 'ja'];
+
+/** Return the best supported outputLanguage for the given UI language. */
+const resolveOutputLang = (uiLang) =>
+  SUPPORTED_OUTPUT_LANGS.includes(uiLang) ? uiLang : 'en';
+
 // ── Translator API ─────────────────────────────────────────────────────────────
 
 /**
@@ -90,11 +96,12 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 
   const uiLang = chrome.i18n.getUILanguage().split('-')[0];
   const inputLangs = uiLang === 'en' ? ['en'] : [uiLang, 'en'];
+  const outputLang = resolveOutputLang(uiLang);
 
   try {
     const availability = await LanguageModel.availability({
       expectedInputLanguages: inputLangs,
-      expectedOutputLanguages: ['en'],
+      outputLanguage: outputLang,
     });
     if (availability !== 'available') return null;
 
@@ -110,7 +117,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
       LanguageModel.create({
         systemPrompt,
         expectedInputLanguages: inputLangs,
-        expectedOutputLanguages: ['en'],
+        outputLanguage: outputLang,
       }),
       makeTimeout(60000),
     ]);
@@ -232,7 +239,7 @@ export async function rankWithAI(candidates, transcript) {
   try {
     const availability = await LanguageModel.availability({
       expectedInputLanguages: inputLangs,
-      expectedOutputLanguages: ['en'],
+      outputLanguage: 'en',
     });
     if (availability !== 'available') {
       console.debug('[VoiceMarkets] LanguageModel not available:', availability);
@@ -244,7 +251,7 @@ export async function rankWithAI(candidates, transcript) {
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
         expectedInputLanguages: inputLangs,
-        expectedOutputLanguages: ['en'],
+        outputLanguage: 'en',
       }),
       makeTimeout(30000, 'AI timeout'),
     ]);
@@ -313,9 +320,10 @@ export async function checkAIAvailability() {
   try {
     const uiLang = chrome.i18n.getUILanguage().split('-')[0];
     const inputLangs = uiLang === 'en' ? ['en'] : [uiLang, 'en'];
+    const outputLang = resolveOutputLang(uiLang);
     const availability = await LanguageModel.availability({
       expectedInputLanguages: inputLangs,
-      expectedOutputLanguages: ['en'],
+      outputLanguage: outputLang,
     });
     console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
   } catch (e) {
