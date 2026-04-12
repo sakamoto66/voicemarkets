@@ -134,8 +134,8 @@ async function runSearch(input) {
       ? intent.keywords
       : await extractKeywordsBilingual(bestTranscript);
 
-    // Allow empty keywords only when AI detected a non-'all' period (temporal-only query)
-    const hasTemporalIntent = intent?.period && intent.period !== 'all';
+    // Allow empty keywords only when AI detected an explicit period (temporal-only query)
+    const hasTemporalIntent = intent?.period != null;
     if (keywords.length === 0 && !hasTemporalIntent) {
       status(t('error_no_recognition'));
       return;
@@ -224,13 +224,13 @@ function fetchHistory(keywords) {
 
 // ── Intent → UI ───────────────────────────────────────────────────────────────
 function applyIntentToUI(intent) {
-  if (intent.period) {
+  if (intent.period != null) {
     currentPeriod = intent.period;
     for (const p of periodPills) {
       p.classList.toggle('active', p.dataset.period === intent.period);
     }
   }
-  if (intent.sources?.length > 0) {
+  if (intent.sources != null && intent.sources.length > 0) {
     activeSources = new Set(intent.sources);
     for (const t of sourceToggles) {
       const active = activeSources.has(t.dataset.source);

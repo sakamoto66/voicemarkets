@@ -113,11 +113,11 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
       type: 'object',
       properties: {
         selected: { type: 'number' },
-        period:   { type: 'string', enum: ['all', '1h', '24h', '1w', '1m', '1y'] },
+        period:   { type: ['string', 'null'], enum: ['1h', '24h', '1w', '1m', '1y', null] },
         keywords: { type: 'array', items: { type: 'string' }, minItems: 5, maxItems: 20 },
-        sources:  { type: 'array', items: { type: 'string', enum: ['bookmarks', 'history'] } },
+        sources:  { type: ['array', 'null'], items: { type: 'string', enum: ['bookmarks', 'history'] } },
       },
-      required: ['selected', 'period', 'keywords', 'sources'],
+      required: ['selected', 'keywords'],
     };
 
     onStatus(t('status_parsing_query'));
@@ -168,30 +168,28 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
     'Pick the most natural-sounding speech-recognition alternative (1-based index).',
     '',
     '## period',
-    'Detect time range from the chosen alternative:',
-    '  "直近" "さっき" "今さっき" → 1h',
-    '  "今日" "今朝" "昨日" "最近" → 24h',
-    '  "今週" "先週" → 1w | "今月" → 1m | "今年" → 1y | otherwise → all',
+    'Detect time range ONLY when the query explicitly contains a time expression:',
+    '  very recent / just now / moments ago → 1h',
+    '  today / this morning / yesterday / recently → 24h',
+    '  this week / last week → 1w | this month → 1m | this year → 1y',
+    '  No time expression in the query → omit this field (null)',
     '',
     '## keywords',
     'For every topic concept in the query, generate ALL of the following variants:',
-    '1. Drop stop/meta words: の,を,に,は,た,こと,見た,今日,履歴,ブックマーク,お気に入り,検索,開いた',
-    '2. Original surface form (e.g. "ニュース", "react")',
-    '3. English equivalent for Japanese ("ニュース"→"news", "設定"→"settings", "入門"→"introduction", "機械学習"→"machine learning")',
-    '4. Japanese/katakana equivalent for English ("news"→"ニュース", "settings"→"設定", "react"→"リアクト")',
-    '5. Resolve katakana to actual English brand/product name:',
-    '   "ギットハブ"→"github" | "リアクト"→"react" | "タイプスクリプト"→"typescript"',
-    '   "ツイッター"→"twitter" | "ユーチューブ"→"youtube" | "ネクスト"→"nextjs"',
-    '   "パイソン"→"python" | "ドッカー"→"docker" | "クロード"→"claude" | "オープンエーアイ"→"openai"',
-    '6. Common abbreviations and expansions: "JS"↔"javascript", "TS"↔"typescript", "AI"↔"artificial intelligence", "ML"↔"machine learning"',
-    '7. Related sub-terms: e.g. "react" → also add "jsx", "component", "hook"; "docker" → "container", "compose"',
+    '1. Drop stop words, grammatical particles, and search meta-terms (history, bookmarks, favorites, search, today, etc.)',
+    '2. Original surface form as spoken',
+    '3. English equivalent for any non-English term',
+    '4. Non-English equivalent for any English term (katakana for Japanese context)',
+    '5. Resolve phonetic brand/product names to their canonical spelling (e.g. spoken sound → "github", "react", "typescript")',
+    '6. Common abbreviations and expansions: JS↔javascript, TS↔typescript, AI↔artificial intelligence, ML↔machine learning',
+    '7. Related sub-terms: e.g. react → jsx, component, hook; docker → container, compose',
     '8. Spelling variants and common typos that a speech recognizer might produce',
     'Target 20 items. Always include both Japanese and English forms for every concept.',
     '',
     '## sources',
-    '["bookmarks"] if user says お気に入り/ブックマーク/bookmark/favorite.',
-    '["history"] if user says 履歴/見た/visited/閲覧/browsed.',
-    '["bookmarks","history"] otherwise.',
+    '["bookmarks"] if user refers to bookmarks or favorites.',
+    '["history"] if user refers to browsing history or visited pages.',
+    'No source keyword in the query → omit this field (null).',
     ...(bookmarkDictionary.length > 0 ? [
       '',
       '## known terms from user\'s bookmarks (prefer these spellings when a spoken word sounds similar)',
@@ -292,7 +290,7 @@ export async function rankWithAI(candidates, transcript) {
 
 export async function checkAIAvailability() {
   if (typeof LanguageModel === 'undefined') {
-    console.debug('[VoiceMarkets] LanguageModel unavailable — キーワード順で動作します');
+    console.debug('[VoiceMarkets] LanguageModel unavailable — falling back to keyword ranking');
     return;
   }
   try {
