@@ -6,25 +6,52 @@ VoiceMarkets: Chrome MV3 extension for voice-driven bookmark/history navigation.
 
 ## Tech Stack
 
-- Chrome MV3, Web Speech API (lang: `chrome.i18n.getUILanguage()`), `LanguageModel` global (Gemini Nano), `Translator` global
+- Chrome MV3 (Manifest V3)
+- Web Speech API (`lang: chrome.i18n.getUILanguage()`)
+- `LanguageModel` global — Gemini Nano (Stage 0 intent parsing, Stage 2 ranking)
+- `Translator` global — bilingual keyword extraction (UI language ↔ en)
 - Permissions: `bookmarks`, `history`, `tabs`, `storage`, `windows`
-- Tests: `npm test` (Vitest, pure functions) · `npm run test:e2e` (Playwright)
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `npm test` | Vitest unit tests (pure functions) |
+| `npm run test:e2e` | Playwright E2E tests |
+
+## Module Structure
+
+| File | Role |
+|------|------|
+| `popup/popup.js` | Orchestrator: app state, event wiring |
+| `popup/voice.js` | Web Speech API (`createVoice`) |
+| `popup/ai.js` | Translator + Gemini Nano (intent / ranking) |
+| `popup/search.js` | Pure functions: keyword extraction, scoring, filtering |
+| `popup/cache.js` | Startup bookmark fetch via `chrome.bookmarks.getTree()` |
+| `popup/i18n.js` | `t()` wrapper + `applyI18n()` |
+| `popup/render.js` | DOM helpers |
 
 ## Architecture: Three-Stage Search
 
-1. **Stage 0 — Intent parsing** (Gemini Nano, optional): select best speech alternative, detect time period, expand keywords bilingually, determine sources; falls back to Stage 1 on failure
-2. **Stage 1 — Keyword filter**: `chrome.bookmarks.search()` + per-keyword `chrome.history.search()` calls, score by frequency+recency, top 20 candidates
-3. **Stage 2 — Semantic ranking** (Gemini Nano, optional): re-rank top **5** candidates; silent fallback to Stage 1 if unavailable
-
-Translator API also used for bilingual keyword extraction (ja↔en) during Stage 0/1.
+1. **Stage 0** (Gemini Nano, optional): select best speech alt, detect period, expand keywords bilingually, determine sources
+2. **Stage 1**: bookmarks from memory cache filtered client-side; history via per-keyword `chrome.history.search()` (top 8 longest tokens); score + top 20
+3. **Stage 2** (Gemini Nano, optional): re-rank top **5**; silent fallback to Stage 1 order
 
 ## Critical Constraints
 
-- **Gemini Nano JSON**: always `try/catch` + strip markdown fences before `JSON.parse()` (even with `responseConstraint`)
-- **Keyword tokenization**: `extractKeywords()` uses `Intl.Segmenter(undefined, { granularity: 'word' })` — same ICU engine as `chrome.history.search()` internally. This makes tokens match what Chrome indexed, enabling direct per-keyword API calls for any language including Japanese. Do NOT revert to whitespace splitting.
-- **History `startTime`**: always pass `startTime` explicitly to `chrome.history.search()` — omitting it triggers an undocumented 24-hour default (`SetRecentDayRange(1)` in Chromium source). Use `Date.now() - 90 * 86_400_000` as the fallback when period is 'all'.
-- **Popup blur**: attach `window.onblur` to stop Web Speech API recognition
-- **Token budget**: top-5 limit in Stage 2 is a measured tradeoff — test before increasing
+- **Intl.Segmenter**: `extractKeywords()` uses `Intl.Segmenter(undefined, { granularity: 'word' })` — same ICU engine as Chrome's history index. Do NOT revert to whitespace splitting.
+- **CJK min length**: Han/Hiragana/Katakana/Hangul → min 2 chars; Latin → min 3.
+- **History `startTime`**: always pass explicitly — omitting triggers undocumented 24h default. Fallback: `Date.now() - 90 * 86_400_000`.
+- **Gemini Nano JSON**: strip markdown fences + `try/catch` before `JSON.parse()`, even with `responseConstraint`.
+- **Top-5 limit** in Stage 2 is a measured tradeoff — test before increasing.
+
+## Behavioral Principles
+
+- 3ステップ以上のタスクは必ずPlanモードで開始する
+- コードを読まずに書かない。既存の実装を確認してから変更する
+- 動作を証明できるまでタスクを完了とマークしない
+- 変更は必要な箇所のみ。影響範囲を最小化する
+- コンテキストが逼迫したら正直に伝えて区切りを提案する
 
 ## Skill Routing
 
