@@ -20,9 +20,15 @@ const makeTimeout = (ms, label = 'timeout') =>
 
 const SUPPORTED_OUTPUT_LANGS = ['en', 'es', 'ja'];
 
-/** Return the best supported outputLanguage for the given UI language. */
+/** Return the best supported output language for the given UI language. */
 const resolveOutputLang = (uiLang) =>
   SUPPORTED_OUTPUT_LANGS.includes(uiLang) ? uiLang : 'en';
+
+/** Build LanguageModel expectedInputs/expectedOutputs options. */
+const makeLMOptions = (inputLangs, outputLang) => ({
+  expectedInputs:  [{ type: 'text', languages: [...new Set(inputLangs)] }],
+  expectedOutputs: [{ type: 'text', languages: [outputLang] }],
+});
 
 // ── Translator API ─────────────────────────────────────────────────────────────
 
@@ -97,11 +103,10 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
   const uiLang = chrome.i18n.getUILanguage().split('-')[0];
   const outputLang = resolveOutputLang(uiLang);
 
+  const lmOpts = makeLMOptions(['en', uiLang], outputLang);
+
   try {
-    const availability = await LanguageModel.availability({
-      expectedInputs:  [{ type: 'text', languages: ['en', uiLang] }],
-      expectedOutputs: [{ type: 'text', languages: [outputLang] }],
-    });
+    const availability = await LanguageModel.availability(lmOpts);
     if (availability !== 'available') return null;
 
     onStatus(t('status_loading_ai'));
@@ -113,11 +118,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 
     let session;
     session = await Promise.race([
-      LanguageModel.create({
-        systemPrompt,
-        expectedInputs:  [{ type: 'text', languages: ['en', uiLang] }],
-        expectedOutputs: [{ type: 'text', languages: [outputLang] }],
-      }),
+      LanguageModel.create({ systemPrompt, ...lmOpts }),
       makeTimeout(60000),
     ]);
 
@@ -232,11 +233,10 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
 export async function rankWithAI(candidates, transcript) {
   if (typeof LanguageModel === 'undefined') return null;
 
+  const lmOpts = makeLMOptions(['en'], 'en');
+
   try {
-    const availability = await LanguageModel.availability({
-      expectedInputs:  [{ type: 'text', languages: ['en'] }],
-      expectedOutputs: [{ type: 'text', languages: ['en'] }],
-    });
+    const availability = await LanguageModel.availability(lmOpts);
     if (availability !== 'available') {
       console.debug('[VoiceMarkets] LanguageModel not available:', availability);
       return null;
@@ -246,8 +246,7 @@ export async function rankWithAI(candidates, transcript) {
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
-        expectedInputs:  [{ type: 'text', languages: ['en'] }],
-        expectedOutputs: [{ type: 'text', languages: ['en'] }],
+        ...lmOpts,
       }),
       makeTimeout(30000, 'AI timeout'),
     ]);
@@ -316,10 +315,7 @@ export async function checkAIAvailability() {
   try {
     const uiLang = chrome.i18n.getUILanguage().split('-')[0];
     const outputLang = resolveOutputLang(uiLang);
-    const availability = await LanguageModel.availability({
-      expectedInputs:  [{ type: 'text', languages: ['en', uiLang] }],
-      expectedOutputs: [{ type: 'text', languages: [outputLang] }],
-    });
+    const availability = await LanguageModel.availability(makeLMOptions(['en', uiLang], outputLang));
     console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
   } catch (e) {
     console.debug('[VoiceMarkets] Gemini Nano capability check failed:', e);
