@@ -29,7 +29,7 @@ export async function rankWithAI(candidates, transcript) {
 
     const session = await Promise.race([
       LanguageModel.create({
-        systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
+        systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{i,score}] sorted by score descending. i is the 1-based item number.',
         ...lmOpts,
       }),
       makeTimeout(30000, 'AI timeout'),
