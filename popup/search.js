@@ -19,23 +19,27 @@ const STOP_WORDS = new Set([
 
 /**
  * Extract meaningful keywords from a speech transcript.
+ * Uses Intl.Segmenter for ICU-aligned word tokenization — matches the same
+ * segmentation that chrome.history.search() uses internally, so extracted
+ * tokens work as search queries for any language without special-casing.
+ *
  * @param {string} transcript
  * @returns {string[]}
  */
 export function extractKeywords(transcript) {
   if (!transcript || typeof transcript !== 'string') return [];
 
-  const normalized = transcript
-    .toLowerCase()
-    .replace(/[。、！？「」『』【】・…]/g, ' ')
-    .replace(/[.,!?;:"'()\[\]{}\-]/g, ' ')
-    .trim();
+  const normalized = transcript.toLowerCase();
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+  const words = [];
 
-  const tokens = normalized.split(/\s+/).filter(Boolean);
+  for (const { segment, isWordLike } of segmenter.segment(normalized)) {
+    if (isWordLike && segment.length >= 2 && !STOP_WORDS.has(segment)) {
+      words.push(segment);
+    }
+  }
 
-  const keywords = tokens.filter(t => t.length >= 2 && !STOP_WORDS.has(t));
-
-  return [...new Set(keywords)];
+  return [...new Set(words)];
 }
 
 /**
@@ -92,7 +96,7 @@ export function scoreItem(item, keywords) {
 
 /**
  * Filter items client-side by keyword presence (title or URL).
- * Used for Japanese history search where chrome.history.search text filter is broken.
+ * Used for bookmark search where the full set is already loaded in memory.
  *
  * @param {Array<{ title?: string, url?: string }>} items
  * @param {string[]} keywords

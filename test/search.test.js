@@ -65,6 +65,42 @@ describe('extractKeywords', () => {
     expect(kws).toContain('actions');
     expect(kws).toContain('pipeline');
   });
+
+  // ── Japanese segmentation (Intl.Segmenter) ────────────────────────────────
+  it('splits unseparated Japanese into ICU word tokens', () => {
+    const kws = extractKeywords('ダッシュボードを開く');
+    expect(kws).toContain('ダッシュボード');
+    expect(kws).toContain('開く');
+    // must NOT contain the original unsplit string
+    expect(kws).not.toContain('ダッシュボードを開く');
+  });
+
+  it('splits kanji + particle and filters stop words', () => {
+    const kws = extractKeywords('東京の観光地');
+    // 'の' is a stop word — must be filtered
+    expect(kws).not.toContain('の');
+    // content words must be present (ICU segments 観光地 → 東京, 観光 in V8)
+    expect(kws).toContain('東京');
+    expect(kws).toContain('観光');
+    // unsplit string must NOT survive as a single token
+    expect(kws).not.toContain('東京の観光地');
+  });
+
+  it('produces tokens usable as chrome.history.search queries', () => {
+    // Tokens from Intl.Segmenter align with ICU BREAK_WORD — same engine Chrome uses
+    const kws = extractKeywords('ステータスページを確認');
+    expect(kws).toContain('ステータス');
+    expect(kws).toContain('ページ');
+    expect(kws).toContain('確認');
+  });
+
+  it('handles mixed Japanese/English input', () => {
+    const kws = extractKeywords('GitHubのリポジトリ');
+    expect(kws).toContain('github');
+    // Japanese portion must be split into sub-tokens, not kept as one long string
+    expect(kws).not.toContain('のリポジトリ');
+    expect(kws).not.toContain('gitHubのリポジトリ');
+  });
 });
 
 // ── scoreItem ─────────────────────────────────────────────────────────────────

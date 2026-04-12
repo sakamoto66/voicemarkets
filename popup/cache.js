@@ -38,24 +38,3 @@ export async function buildBookmarkDictionary() {
   }
 }
 
-/**
- * Fetch recent history once at popup startup.
- * 90-day window, up to 5,000 items — covers typical browsing without
- * making the cache unwieldy.
- *
- * @returns {Promise<Array>}
- */
-export async function buildHistoryCache() {
-  try {
-    const historyCache = await chrome.history.search({
-      text: '',
-      maxResults: 5000,
-      startTime: Date.now() - 90 * 86_400_000,
-    });
-    console.debug('[VoiceMarkets] History cache:', historyCache.length, 'items');
-    return historyCache;
-  } catch (e) {
-    console.debug('[VoiceMarkets] buildHistoryCache failed:', e);
-    return [];
-  }
-}
