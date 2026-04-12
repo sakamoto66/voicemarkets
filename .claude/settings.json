@@ -1,6 +1,10 @@
 {
   "permissions": {
-    "allow": [],
+    "allow": [
+      "Bash(npm test:*)",
+      "Skill(browse)",
+      "Skill(browse:*)"
+    ],
     "defaultMode": "bypassPermissions"
   }
 }
