@@ -146,7 +146,13 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
       session.destroy();
     }
 
-    const intent = JSON.parse(response);
+    let intent;
+    try {
+      const stripped = response.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+      intent = JSON.parse(stripped);
+    } catch {
+      return null;
+    }
 
     if (Array.isArray(intent.keywords)) {
       const extra = [

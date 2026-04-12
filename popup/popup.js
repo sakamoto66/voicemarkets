@@ -230,7 +230,7 @@ async function fetchHistory(keywords, startTime) {
   const start = startTime > 0 ? startTime : Date.now() - 90 * 86_400_000;
 
   if (keywords.length === 0) {
-    const items = await chrome.history.search({ text: '', maxResults: 200, startTime: start });
+    const items = await chrome.history.search({ text: '', maxResults: 200, startTime: start }).catch(() => []);
     return items.map(item => ({ ...item, _source: 'history' }));
   }
 

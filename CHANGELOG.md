@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0] — 2026-04-12
+
+### Changed
+- **Language-neutral keyword extraction**: `extractKeywords` and `extractBookmarkKeywords` rewritten using `Intl.Segmenter(undefined, { granularity: 'word' })` — ICU-aligned with Chrome's history index; same tokenization engine, so queries match stored history entries regardless of locale
+- **CJK token min-length**: Han/Hiragana/Katakana/Hangul tokens require ≥ 2 chars; Latin ≥ 3 (reduces noise from CJK particles and short abbreviations)
+- **Per-keyword history search**: replaced startup bulk-fetch cache with `chrome.history.search()` per keyword (top 8 longest tokens, capped at 200 results each) — more relevant results, lower memory footprint
+- **Bilingual keyword expansion**: `translateToEnglish` now detects UI language dynamically; skips translation if UI is already English; Gemini Nano system prompt is fully language-agnostic (no Japanese-specific stop words or katakana heuristics)
+- **Voice recognition language**: `createVoice` sets `lang` from `chrome.i18n.getUILanguage()` at runtime (was hardcoded `ja-JP`)
+- **Hardened JSON parsing**: `parseIntent` now strips markdown fences before `JSON.parse`, consistent with `rankWithAI`
+- **History API error resilience**: empty-keyword history search now `.catch(() => [])` guarded
+
+### Added
+- GitHub Actions CI (`test.yml`) and Chrome Web Store release pipeline (`release.yml`)
+- `scripts/build-zip.mjs` — deterministic extension zip builder
+- GitHub Pages: `docs/index.html`, `docs/privacy.html`, store listing, launch posts
+- Unit tests for `voice.js` language detection (3 tests)
+
+### Removed
+- `buildHistoryCache()` — startup history bulk-fetch eliminated
+- `hasCJKText()` — replaced by `Intl.Segmenter`-based detection
+- `STOP_WORDS` set — language-specific stop words replaced by universal min-length filter
+
 ## [0.2.1] — 2026-04-12
 
 ### Changed
