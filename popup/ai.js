@@ -18,6 +18,12 @@ import { t } from './i18n.js';
 const makeTimeout = (ms, label = 'timeout') =>
   new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms));
 
+/** ['en'] or ['en', '<ui-lang>'] — deduped, always includes 'en'. */
+const inputLanguages = () => {
+  const ui = chrome.i18n.getUILanguage().split('-')[0]; // 'ja-JP' → 'ja'
+  return ui === 'en' ? ['en'] : ['en', ui];
+};
+
 // ── Translator API ─────────────────────────────────────────────────────────────
 
 /**
@@ -25,8 +31,8 @@ const makeTimeout = (ms, label = 'timeout') =>
  * Returns the translated string, or null if unavailable / failed.
  *
  * @param {string} text
- * @param {'ja'|'en'} sourceLang
- * @param {'ja'|'en'} targetLang
+ * @param {string} sourceLang - BCP 47 language code (e.g. 'en', 'ja', 'ko')
+ * @param {string} targetLang - BCP 47 language code (e.g. 'en', 'ja', 'ko')
  * @returns {Promise<string|null>}
  */
 export async function translateQuery(text, sourceLang, targetLang) {
@@ -47,11 +53,13 @@ export async function translateQuery(text, sourceLang, targetLang) {
   }
 }
 
-/** Translate to the opposite language (ja↔en), auto-detecting source. */
+/** Translate to the opposite language (ui-lang↔en), auto-detecting source. */
 export function translateToOppositeLanguage(text) {
+  const ui = chrome.i18n.getUILanguage().split('-')[0];
+  if (ui === 'en') return Promise.resolve(null);
   return hasCJKText(text)
-    ? translateQuery(text, 'ja', 'en')
-    : translateQuery(text, 'en', 'ja');
+    ? translateQuery(text, ui, 'en')
+    : translateQuery(text, 'en', ui);
 }
 
 /**
@@ -87,8 +95,8 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: ['ja', 'en'],
-      expectedOutputLanguages: ['en'],
+      expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     if (availability !== 'available') return null;
 
@@ -103,8 +111,8 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt,
-        expectedInputLanguages: ['ja', 'en'],
-        expectedOutputLanguages: ['en'],
+        expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
       }),
       makeTimeout(60000),
     ]);
@@ -124,8 +132,9 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const altLines = alternatives
       .map((a, i) => `${i + 1}. "${a.transcript.slice(0, 80)}" (confidence: ${a.confidence.toFixed(2)})`)
       .join('\n');
+    const uiLangUpper = chrome.i18n.getUILanguage().split('-')[0].toUpperCase();
     const translationLine = translationHint
-      ? `\nTranslation (${hasCJKText(primaryText) ? 'EN' : 'JA'}) — you MUST include words from this in keywords: "${translationHint}"`
+      ? `\nTranslation (${hasCJKText(primaryText) ? 'EN' : uiLangUpper}) — you MUST include words from this in keywords: "${translationHint}"`
       : '';
     const intentPrompt = `Speech recognition alternatives:\n${altLines}${translationLine}`;
     console.debug('[VoiceMarkets] parseIntent prompt:', intentPrompt);
@@ -214,8 +223,8 @@ export async function rankWithAI(candidates, transcript) {
 
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: ['ja', 'en'],
-      expectedOutputLanguages: ['en'],
+      expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     if (availability !== 'available') {
       console.debug('[VoiceMarkets] LanguageModel not available:', availability);
@@ -226,8 +235,8 @@ export async function rankWithAI(candidates, transcript) {
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
-        expectedInputLanguages: ['ja', 'en'],
-        expectedOutputLanguages: ['en'],
+        expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
       }),
       makeTimeout(30000, 'AI timeout'),
     ]);
@@ -295,8 +304,8 @@ export async function checkAIAvailability() {
   }
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: ['ja', 'en'],
-      expectedOutputLanguages: ['en'],
+      expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
   } catch (e) {
