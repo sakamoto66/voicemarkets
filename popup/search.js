@@ -3,19 +3,12 @@
  * Testable with Vitest; imported by popup.js at runtime.
  */
 
-// Japanese and English stop words to strip from transcripts
-const STOP_WORDS = new Set([
-  // Japanese particles / auxiliaries
-  'の', 'に', 'は', 'を', 'た', 'が', 'で', 'て', 'と', 'し', 'れ', 'さ',
-  'ある', 'いる', 'も', 'する', 'から', 'な', 'こと', 'として', 'い', 'や',
-  'れる', 'など', 'なり', 'もの', 'という', 'ず', 'ない', 'しかし', 'まだ',
-  'って', 'けど', 'だ', 'です', 'ます', 'ました',
-  // English
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-  'should', 'may', 'might', 'of', 'in', 'on', 'at', 'to', 'for', 'with',
-  'by', 'from', 'and', 'or', 'but', 'if', 'this', 'that', 'it', 'its',
-]);
+// CJK scripts (Han, Hiragana, Katakana, Hangul) use a shorter minimum length
+// because meaningful words can be 2 characters. Latin-script function words
+// (of, in, to, or, …) are typically ≤2 chars, so a threshold of 3 filters
+// most of them without a language-specific stop word list.
+const CJK_RE = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u;
+const minSegmentLength = (seg) => CJK_RE.test(seg) ? 2 : 3;
 
 /**
  * Extract meaningful keywords from a speech transcript.
@@ -34,7 +27,7 @@ export function extractKeywords(transcript) {
   const words = [];
 
   for (const { segment, isWordLike } of segmenter.segment(normalized)) {
-    if (isWordLike && segment.length >= 2 && !STOP_WORDS.has(segment)) {
+    if (isWordLike && segment.length >= minSegmentLength(segment)) {
       words.push(segment);
     }
   }

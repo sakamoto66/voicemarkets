@@ -33,15 +33,17 @@ describe('extractKeywords', () => {
     expect(kws.join('')).not.toMatch(/[,!-]/);
   });
 
-  it('filters out English stop words', () => {
-    const kws = extractKeywords('the quick brown fox');
-    expect(kws).not.toContain('the');
+  it('filters out short Latin tokens (length < 3)', () => {
+    const kws = extractKeywords('of in or quick brown fox');
+    expect(kws).not.toContain('of');
+    expect(kws).not.toContain('in');
+    expect(kws).not.toContain('or');
     expect(kws).toContain('quick');
     expect(kws).toContain('brown');
     expect(kws).toContain('fox');
   });
 
-  it('filters out Japanese stop words', () => {
+  it('filters out short CJK tokens (length < 2)', () => {
     const kws = extractKeywords('東京の観光地');
     expect(kws).not.toContain('の');
   });
