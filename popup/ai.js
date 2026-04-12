@@ -83,12 +83,12 @@ export async function extractKeywordsBilingual(transcript) {
 
 /**
  * Parse search intent from voice recognition alternatives using Gemini Nano.
- * Returns { selected, period, keywords, sources } on success, null if unavailable / failed.
+ * Returns { keywords } on success, null if unavailable / failed.
  *
  * @param {Array<{transcript: string, confidence: number}>} alternatives
  * @param {string[]} bookmarkDictionary
  * @param {(msg: string) => void} onStatus
- * @returns {Promise<{selected: number, period: string, keywords: string[], sources: string[]}|null>}
+ * @returns {Promise<{keywords: string[]}|null>}
  */
 export async function parseIntent(alternatives, bookmarkDictionary, onStatus = () => {}) {
   if (typeof LanguageModel === 'undefined') return null;
@@ -104,7 +104,9 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const systemPrompt = buildIntentSystemPrompt(bookmarkDictionary);
     console.debug('[VoiceMarkets] parseIntent systemPrompt:\n', systemPrompt);
 
-    const primaryText     = alternatives[0].transcript;
+    // Use all alternatives with confidence >= 0.1 as keyword sources
+    const usable      = alternatives.filter(a => a.confidence >= 0.1);
+    const primaryText = usable[0]?.transcript ?? alternatives[0].transcript;
     const translationHint = await translateToOppositeLanguage(primaryText);
 
     let session;
@@ -120,23 +122,19 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const schema = {
       type: 'object',
       properties: {
-        selected: { type: 'number' },
-        period:   { type: ['string', 'null'], enum: ['1h', '24h', '1w', '1m', '1y', null] },
         keywords: { type: 'array', items: { type: 'string' }, minItems: 5, maxItems: 20 },
-        sources:  { type: ['array', 'null'], items: { type: 'string', enum: ['bookmarks', 'history'] } },
       },
-      required: ['selected', 'keywords'],
+      required: ['keywords'],
     };
 
     onStatus(t('status_parsing_query'));
-    const altLines = alternatives
+    const altLines = usable
       .map((a, i) => `${i + 1}. "${a.transcript.slice(0, 80)}" (confidence: ${a.confidence.toFixed(2)})`)
       .join('\n');
-    const uiLangUpper = chrome.i18n.getUILanguage().split('-')[0].toUpperCase();
     const translationLine = translationHint
-      ? `\nTranslation (${hasCJKText(primaryText) ? 'EN' : uiLangUpper}) — you MUST include words from this in keywords: "${translationHint}"`
+      ? `\nAlso expand keywords using this translation: "${translationHint}"`
       : '';
-    const intentPrompt = `Speech recognition alternatives:\n${altLines}${translationLine}`;
+    const intentPrompt = `User query candidates:\n${altLines}${translationLine}`;
     console.debug('[VoiceMarkets] parseIntent prompt:', intentPrompt);
 
     let response;
@@ -152,10 +150,11 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const intent = JSON.parse(response);
 
     if (Array.isArray(intent.keywords)) {
-      const extra = [
-        ...extractKeywords(primaryText),
-        ...(translationHint ? extractKeywords(translationHint) : []),
-      ];
+      // Merge AI keywords with keyword-extracted terms from all usable alternatives
+      const extra = usable.flatMap(a => [
+        ...extractKeywords(a.transcript),
+        ...(translationHint && a === usable[0] ? extractKeywords(translationHint) : []),
+      ]);
       intent.keywords = [...new Set([...intent.keywords, ...extra])].slice(0, 20);
     }
 
@@ -173,20 +172,12 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
     'Bookmarks have titles in Japanese, English, or both.',
     'Generate keywords in BOTH languages so the search matches regardless of how the page was titled.',
     '',
-    '## selected',
-    'Pick the most natural-sounding speech-recognition alternative (1-based index).',
-    '',
-    '## period',
-    'Detect time range ONLY when the query explicitly contains a time expression:',
-    '  very recent / just now / moments ago → 1h',
-    '  today / this morning / yesterday / recently → 24h',
-    '  this week / last week → 1w | this month → 1m | this year → 1y',
-    '  No time expression in the query → omit this field (null)',
-    '',
     '## keywords',
-    'For every topic concept in the query, generate ALL of the following variants:',
+    'You are given multiple query candidates for the same user utterance. Extract topic concepts from ALL of them.',
+    'NEVER include words from the prompt structure itself (e.g. "query", "candidate", "translation", "confidence", "alternative", "recognition", "speech", language codes like "JA"/"EN").',
+    'For every topic concept found across any candidate, generate ALL of the following variants:',
     '1. Drop stop words, grammatical particles, and search meta-terms (history, bookmarks, favorites, search, today, etc.)',
-    '2. Original surface form as spoken',
+    '2. Original surface form as spoken (from every alternative)',
     '3. English equivalent for any non-English term',
     '4. Non-English equivalent for any English term (katakana for Japanese context)',
     '5. Resolve phonetic brand/product names to their canonical spelling (e.g. spoken sound → "github", "react", "typescript")',
@@ -194,11 +185,6 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
     '7. Related sub-terms: e.g. react → jsx, component, hook; docker → container, compose',
     '8. Spelling variants and common typos that a speech recognizer might produce',
     'Target 20 items. Always include both Japanese and English forms for every concept.',
-    '',
-    '## sources',
-    '["bookmarks"] if user refers to bookmarks or favorites.',
-    '["history"] if user refers to browsing history or visited pages.',
-    'No source keyword in the query → omit this field (null).',
     ...(bookmarkDictionary.length > 0 ? [
       '',
       '## known terms from user\'s bookmarks (prefer these spellings when a spoken word sounds similar)',
