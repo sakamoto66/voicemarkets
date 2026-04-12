@@ -161,36 +161,36 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 function buildIntentSystemPrompt(bookmarkDictionary) {
   return [
     'You are a multilingual search keyword expander for a browser bookmark/history search tool.',
-    'Bookmarks have titles in Japanese, English, or both.',
-    'Generate keywords in BOTH languages so the search matches regardless of how the page was titled.',
+    'The user speaks in any language. Bookmarks and history pages may be titled in any language.',
+    'Generate search keywords in BOTH the original language AND English so results match regardless of how pages were saved.',
     '',
     '## selected',
     'Pick the most natural-sounding speech-recognition alternative (1-based index).',
     '',
     '## period',
-    'Detect time range from the chosen alternative:',
-    '  "直近" "さっき" "今さっき" → 1h',
-    '  "今日" "今朝" "昨日" "最近" → 24h',
-    '  "今週" "先週" → 1w | "今月" → 1m | "今年" → 1y | otherwise → all',
+    'Detect the time range from the chosen alternative (handle expressions in any language):',
+    '  "just now / a moment ago / very recently (minutes)" → 1h',
+    '  "today / this morning / yesterday / lately / recently (days)" → 24h',
+    '  "this week / last week" → 1w',
+    '  "this month" → 1m',
+    '  "this year" → 1y',
+    '  no time expression → all',
     '',
     '## keywords',
     'For every topic concept in the query, generate ALL of the following variants:',
-    '1. Drop stop/meta words: の,を,に,は,た,こと,見た,今日,履歴,ブックマーク,お気に入り,検索,開いた',
-    '2. Original surface form (e.g. "ニュース", "react")',
-    '3. English equivalent for Japanese ("ニュース"→"news", "設定"→"settings", "入門"→"introduction", "機械学習"→"machine learning")',
-    '4. Japanese/katakana equivalent for English ("news"→"ニュース", "settings"→"設定", "react"→"リアクト")',
-    '5. Resolve katakana to actual English brand/product name:',
-    '   "ギットハブ"→"github" | "リアクト"→"react" | "タイプスクリプト"→"typescript"',
-    '   "ツイッター"→"twitter" | "ユーチューブ"→"youtube" | "ネクスト"→"nextjs"',
-    '   "パイソン"→"python" | "ドッカー"→"docker" | "クロード"→"claude" | "オープンエーアイ"→"openai"',
-    '6. Common abbreviations and expansions: "JS"↔"javascript", "TS"↔"typescript", "AI"↔"artificial intelligence", "ML"↔"machine learning"',
+    '1. Drop filler and meta-search words (grammatical particles, search-action terms like "bookmark", "history", "favorites", "open", "search", "find", and temporal words already captured in period)',
+    '2. Original surface form as heard/spoken',
+    '3. English equivalent if the query is in another language',
+    '4. Native-language equivalent if the query is in English (most common local translation)',
+    '5. Resolve phonetically spelled brand/product names to their canonical form (e.g. spoken "githyubu" → "github", "riaakuto" → "react", "taiipusukuriputo" → "typescript")',
+    '6. Common abbreviations and expansions: JS↔javascript, TS↔typescript, AI↔artificial intelligence, ML↔machine learning',
     '7. Related sub-terms: e.g. "react" → also add "jsx", "component", "hook"; "docker" → "container", "compose"',
-    '8. Spelling variants and common typos that a speech recognizer might produce',
-    'Target 20 items. Always include both Japanese and English forms for every concept.',
+    '8. Spelling variants and common mis-recognitions that a speech recognizer might produce',
+    'Target 20 items. Always include both the original language and English forms for every concept.',
     '',
     '## sources',
-    '["bookmarks"] if user says お気に入り/ブックマーク/bookmark/favorite.',
-    '["history"] if user says 履歴/見た/visited/閲覧/browsed.',
+    '["bookmarks"] if user mentions bookmarks / favorites / saved pages.',
+    '["history"] if user mentions browsing history / visited / viewed pages.',
     '["bookmarks","history"] otherwise.',
     ...(bookmarkDictionary.length > 0 ? [
       '',
@@ -292,7 +292,7 @@ export async function rankWithAI(candidates, transcript) {
 
 export async function checkAIAvailability() {
   if (typeof LanguageModel === 'undefined') {
-    console.debug('[VoiceMarkets] LanguageModel unavailable — キーワード順で動作します');
+    console.debug('[VoiceMarkets] LanguageModel unavailable — running in keyword-only mode');
     return;
   }
   try {
