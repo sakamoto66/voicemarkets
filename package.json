@@ -1,6 +1,6 @@
 {
   "name": "voicemarkets",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Chrome extension for voice-based bookmark/history search",
   "private": true,
   "type": "module",
@@ -9,10 +9,12 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "build:zip": "node scripts/build-zip.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "archiver": "^7.0.1",
     "vitest": "^2.0.0"
   }
 }

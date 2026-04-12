@@ -12,7 +12,7 @@
 import { scoreItem, filterByKeywords, getPeriodStartTime } from './search.js';
 import { SpeechRecognition, createVoice } from './voice.js';
 import { parseIntent, rankWithAI, extractKeywordsBilingual, checkAIAvailability } from './ai.js';
-import { buildBookmarkDictionary, buildHistoryCache } from './cache.js';
+import { buildBookmarkDictionary } from './cache.js';
 import { setStatus, renderResults, hideResults } from './render.js';
 import { t, applyI18n } from './i18n.js';
 
@@ -33,7 +33,6 @@ let currentPeriod      = 'all';
 let activeSources      = new Set(['bookmarks', 'history']);
 let bookmarkDictionary = [];
 let bookmarkCache      = [];
-let historyCache       = [];
 
 // ── Shorthand ─────────────────────────────────────────────────────────────────
 const status = (text, isError = false) => setStatus(statusEl, text, isError);
@@ -174,8 +173,8 @@ async function fetchCandidates(keywords, period, sources) {
   const startTime = getPeriodStartTime(period);
 
   const [bookmarks, historyItems] = await Promise.all([
-    sources.has('bookmarks') ? fetchBookmarks(keywords) : Promise.resolve([]),
-    sources.has('history')   ? fetchHistory(keywords)   : Promise.resolve([]),
+    sources.has('bookmarks') ? fetchBookmarks(keywords)              : Promise.resolve([]),
+    sources.has('history')   ? fetchHistory(keywords, startTime)     : Promise.resolve([]),
   ]);
 
   // Deduplicate by URL (bookmark wins over history for the same URL)
@@ -186,11 +185,10 @@ async function fetchCandidates(keywords, period, sources) {
     return true;
   });
 
+  // Period filter for bookmarks only — history is already filtered by the API via startTime
   const periodFiltered = startTime === 0 ? deduped : deduped.filter(item => {
-    const time = item._source === 'bookmark'
-      ? (item.dateAdded || 0)
-      : (item.lastVisitTime || 0);
-    return time >= startTime;
+    if (item._source !== 'bookmark') return true;
+    return (item.dateAdded || 0) >= startTime;
   });
 
   // Temporal-only query (no keywords): sort by recency
@@ -217,9 +215,46 @@ function fetchBookmarks(keywords) {
     .map(item => ({ ...item, _source: 'bookmark' }));
 }
 
-function fetchHistory(keywords) {
-  return filterByKeywords(historyCache, keywords)
-    .map(item => ({ ...item, _source: 'history' }));
+/**
+ * Fetch history by searching each keyword via chrome.history.search().
+ * Tokens are ICU-aligned (from Intl.Segmenter), so they match the API's
+ * internal tokenization — no bulk fetch or client-side filter needed.
+ *
+ * Always passes startTime to avoid the implicit 24-hour default.
+ *
+ * @param {string[]} keywords
+ * @param {number} startTime - ms since epoch; 0 = all history
+ * @returns {Promise<Array>}
+ */
+async function fetchHistory(keywords, startTime) {
+  const start = startTime > 0 ? startTime : Date.now() - 90 * 86_400_000;
+
+  if (keywords.length === 0) {
+    const items = await chrome.history.search({ text: '', maxResults: 200, startTime: start }).catch(() => []);
+    return items.map(item => ({ ...item, _source: 'history' }));
+  }
+
+  // Use the longest (most specific) tokens first, cap at 8 to limit API calls
+  const tokens = [...keywords]
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 8);
+
+  const results = await Promise.all(
+    tokens.map(kw =>
+      chrome.history.search({ text: kw, maxResults: 200, startTime: start }).catch(() => [])
+    )
+  );
+
+  // Merge and deduplicate across keyword results
+  const seen = new Map();
+  for (const items of results) {
+    for (const item of items) {
+      if (!item.url || seen.has(item.url)) continue;
+      seen.set(item.url, { ...item, _source: 'history' });
+    }
+  }
+
+  return [...seen.values()];
 }
 
 // ── Intent → UI ───────────────────────────────────────────────────────────────
@@ -296,15 +331,12 @@ async function restoreSearchState() {
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+document.documentElement.lang = chrome.i18n.getUILanguage();
 applyI18n();
 checkAIAvailability();
 restoreSearchState();
 
-Promise.all([
-  buildBookmarkDictionary(),
-  buildHistoryCache(),
-]).then(([bookmarkResult, history]) => {
+buildBookmarkDictionary().then((bookmarkResult) => {
   bookmarkCache      = bookmarkResult.bookmarkCache;
   bookmarkDictionary = bookmarkResult.bookmarkDictionary;
-  historyCache       = history;
 });

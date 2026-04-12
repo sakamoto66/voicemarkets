@@ -3,39 +3,36 @@
  * Testable with Vitest; imported by popup.js at runtime.
  */
 
-// Japanese and English stop words to strip from transcripts
-const STOP_WORDS = new Set([
-  // Japanese particles / auxiliaries
-  'の', 'に', 'は', 'を', 'た', 'が', 'で', 'て', 'と', 'し', 'れ', 'さ',
-  'ある', 'いる', 'も', 'する', 'から', 'な', 'こと', 'として', 'い', 'や',
-  'れる', 'など', 'なり', 'もの', 'という', 'ず', 'ない', 'しかし', 'まだ',
-  'って', 'けど', 'だ', 'です', 'ます', 'ました',
-  // English
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-  'should', 'may', 'might', 'of', 'in', 'on', 'at', 'to', 'for', 'with',
-  'by', 'from', 'and', 'or', 'but', 'if', 'this', 'that', 'it', 'its',
-]);
+// CJK scripts (Han, Hiragana, Katakana, Hangul) use a shorter minimum length
+// because meaningful words can be 2 characters. Latin-script function words
+// (of, in, to, or, …) are typically ≤2 chars, so a threshold of 3 filters
+// most of them without a language-specific stop word list.
+const CJK_RE = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u;
+const minSegmentLength = (seg) => CJK_RE.test(seg) ? 2 : 3;
 
 /**
  * Extract meaningful keywords from a speech transcript.
+ * Uses Intl.Segmenter for ICU-aligned word tokenization — matches the same
+ * segmentation that chrome.history.search() uses internally, so extracted
+ * tokens work as search queries for any language without special-casing.
+ *
  * @param {string} transcript
  * @returns {string[]}
  */
 export function extractKeywords(transcript) {
   if (!transcript || typeof transcript !== 'string') return [];
 
-  const normalized = transcript
-    .toLowerCase()
-    .replace(/[。、！？「」『』【】・…]/g, ' ')
-    .replace(/[.,!?;:"'()\[\]{}\-]/g, ' ')
-    .trim();
+  const normalized = transcript.toLowerCase();
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+  const words = [];
 
-  const tokens = normalized.split(/\s+/).filter(Boolean);
+  for (const { segment, isWordLike } of segmenter.segment(normalized)) {
+    if (isWordLike && segment.length >= minSegmentLength(segment)) {
+      words.push(segment);
+    }
+  }
 
-  const keywords = tokens.filter(t => t.length >= 2 && !STOP_WORDS.has(t));
-
-  return [...new Set(keywords)];
+  return [...new Set(words)];
 }
 
 /**
@@ -92,7 +89,7 @@ export function scoreItem(item, keywords) {
 
 /**
  * Filter items client-side by keyword presence (title or URL).
- * Used for Japanese history search where chrome.history.search text filter is broken.
+ * Used for bookmark search where the full set is already loaded in memory.
  *
  * @param {Array<{ title?: string, url?: string }>} items
  * @param {string[]} keywords
@@ -128,8 +125,8 @@ export function getPeriodStartTime(period) {
 
 /**
  * Extract significant keywords from bookmark titles to build a correction dictionary.
- * Keeps English words, katakana sequences, and kanji compounds — the kinds of terms
- * most likely to be misrecognized by speech input.
+ * Uses Intl.Segmenter for language-neutral word tokenization — works for any script
+ * (Latin, CJK, Hangul, Arabic, Thai, etc.) without language-specific special-casing.
  * Returns unique words sorted by frequency (most common first), capped at 100.
  *
  * @param {string[]} titles - Array of bookmark title strings
@@ -137,22 +134,14 @@ export function getPeriodStartTime(period) {
  */
 export function extractBookmarkKeywords(titles) {
   const freq = new Map();
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 
   for (const title of titles) {
     if (!title) continue;
 
-    const words = title
-      .replace(/[|／｜_:：\[\]【】「」『』()（）・…]/g, ' ')
-      .split(/[\s\-\/]+/)
-      .filter(Boolean);
-
-    for (const word of words) {
-      const isEnglish  = /^[a-zA-Z][a-zA-Z0-9.]{1,}$/.test(word);  // 2+ chars, starts with letter
-      const isKatakana = /^[\u30A0-\u30FF]{3,}$/.test(word);         // 3+ katakana chars
-      const isKanji    = /^[\u4E00-\u9FFF]{2,}$/.test(word);         // 2+ kanji chars
-
-      if (isEnglish || isKatakana || isKanji) {
-        freq.set(word, (freq.get(word) || 0) + 1);
+    for (const { segment, isWordLike } of segmenter.segment(title)) {
+      if (isWordLike && segment.length >= minSegmentLength(segment)) {
+        freq.set(segment, (freq.get(segment) || 0) + 1);
       }
     }
   }
@@ -170,15 +159,6 @@ export function extractBookmarkKeywords(titles) {
  * @param {string} text
  * @returns {Array|null} parsed array, or null on any failure
  */
-/**
- * Returns true if the text contains CJK characters (Japanese/Chinese/katakana/fullwidth).
- * @param {string} text
- * @returns {boolean}
- */
-export function hasCJKText(text) {
-  return /[\u3000-\u9fff\uff00-\uffef]/.test(text);
-}
-
 export function parseAIResponse(text) {
   if (!text || typeof text !== 'string') return null;
 

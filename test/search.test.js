@@ -6,7 +6,6 @@ import {
   parseAIResponse,
   getPeriodStartTime,
   extractBookmarkKeywords,
-  hasCJKText,
 } from '../popup/search.js';
 
 // ── extractKeywords ───────────────────────────────────────────────────────────
@@ -33,15 +32,17 @@ describe('extractKeywords', () => {
     expect(kws.join('')).not.toMatch(/[,!-]/);
   });
 
-  it('filters out English stop words', () => {
-    const kws = extractKeywords('the quick brown fox');
-    expect(kws).not.toContain('the');
+  it('filters out short Latin tokens (length < 3)', () => {
+    const kws = extractKeywords('of in or quick brown fox');
+    expect(kws).not.toContain('of');
+    expect(kws).not.toContain('in');
+    expect(kws).not.toContain('or');
     expect(kws).toContain('quick');
     expect(kws).toContain('brown');
     expect(kws).toContain('fox');
   });
 
-  it('filters out Japanese stop words', () => {
+  it('filters out short CJK tokens (length < 2)', () => {
     const kws = extractKeywords('東京の観光地');
     expect(kws).not.toContain('の');
   });
@@ -64,6 +65,42 @@ describe('extractKeywords', () => {
     expect(kws).toContain('github');
     expect(kws).toContain('actions');
     expect(kws).toContain('pipeline');
+  });
+
+  // ── Japanese segmentation (Intl.Segmenter) ────────────────────────────────
+  it('splits unseparated Japanese into ICU word tokens', () => {
+    const kws = extractKeywords('ダッシュボードを開く');
+    expect(kws).toContain('ダッシュボード');
+    expect(kws).toContain('開く');
+    // must NOT contain the original unsplit string
+    expect(kws).not.toContain('ダッシュボードを開く');
+  });
+
+  it('splits kanji + particle and filters stop words', () => {
+    const kws = extractKeywords('東京の観光地');
+    // 'の' is a stop word — must be filtered
+    expect(kws).not.toContain('の');
+    // content words must be present (ICU segments 観光地 → 東京, 観光 in V8)
+    expect(kws).toContain('東京');
+    expect(kws).toContain('観光');
+    // unsplit string must NOT survive as a single token
+    expect(kws).not.toContain('東京の観光地');
+  });
+
+  it('produces tokens usable as chrome.history.search queries', () => {
+    // Tokens from Intl.Segmenter align with ICU BREAK_WORD — same engine Chrome uses
+    const kws = extractKeywords('ステータスページを確認');
+    expect(kws).toContain('ステータス');
+    expect(kws).toContain('ページ');
+    expect(kws).toContain('確認');
+  });
+
+  it('handles mixed Japanese/English input', () => {
+    const kws = extractKeywords('GitHubのリポジトリ');
+    expect(kws).toContain('github');
+    // Japanese portion must be split into sub-tokens, not kept as one long string
+    expect(kws).not.toContain('のリポジトリ');
+    expect(kws).not.toContain('gitHubのリポジトリ');
   });
 });
 
@@ -215,34 +252,6 @@ describe('getPeriodStartTime', () => {
   });
 });
 
-// ── hasCJKText ────────────────────────────────────────────────────────────────
-describe('hasCJKText', () => {
-  it('returns false for empty string', () => {
-    expect(hasCJKText('')).toBe(false);
-  });
-
-  it('returns false for ASCII-only text', () => {
-    expect(hasCJKText('hello world')).toBe(false);
-    expect(hasCJKText('GitHub Actions CI')).toBe(false);
-  });
-
-  it('returns true for kanji', () => {
-    expect(hasCJKText('東京')).toBe(true);
-  });
-
-  it('returns true for katakana', () => {
-    expect(hasCJKText('ニュース')).toBe(true);
-  });
-
-  it('returns true for hiragana', () => {
-    expect(hasCJKText('ひらがな')).toBe(true);
-  });
-
-  it('returns true for mixed text containing CJK', () => {
-    expect(hasCJKText('GitHub Actions の使い方')).toBe(true);
-  });
-});
-
 // ── extractBookmarkKeywords ───────────────────────────────────────────────────
 describe('extractBookmarkKeywords', () => {
   it('returns empty array for empty input', () => {
@@ -262,10 +271,13 @@ describe('extractBookmarkKeywords', () => {
     expect(result).toContain('サイト');
   });
 
-  it('extracts kanji sequences of 2+ chars as a single token', () => {
-    // No separator — entire kanji string becomes one token
+  it('extracts kanji tokens from compound strings', () => {
+    // Intl.Segmenter applies dictionary-based segmentation, splitting
+    // kanji compounds into meaningful words (e.g. 機械, 学習, 入門)
     const result = extractBookmarkKeywords(['機械学習入門']);
-    expect(result).toContain('機械学習入門');
+    expect(result.length).toBeGreaterThan(0);
+    // All returned tokens must be 2+ chars (CJK minimum length)
+    expect(result.every(w => w.length >= 2)).toBe(true);
   });
 
   it('skips single-char and short tokens that do not qualify', () => {

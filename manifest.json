@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
   "name": "__MSG_app_name__",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "__MSG_app_description__",
-  "default_locale": "ja",
-  "permissions": ["bookmarks", "history", "tabs", "storage", "windows"],
+  "default_locale": "en",
+  "permissions": [
+    "bookmarks",
+    "history",
+    "tabs",
+    "storage",
+    "windows"
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "VoiceMarkets",
