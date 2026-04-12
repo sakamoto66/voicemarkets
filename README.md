@@ -4,7 +4,7 @@
 
 Voice-navigate your bookmarks and history — no typing, no external API.
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Chrome-MV3-yellow.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![Privacy](https://img.shields.io/badge/data-local_only-brightgreen.svg)](https://sakamoto66.github.io/voicemarkets/privacy)
