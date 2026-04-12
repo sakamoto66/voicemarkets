@@ -95,13 +95,12 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
   if (typeof LanguageModel === 'undefined') return null;
 
   const uiLang = chrome.i18n.getUILanguage().split('-')[0];
-  const inputLangs = uiLang === 'en' ? ['en'] : [uiLang, 'en'];
   const outputLang = resolveOutputLang(uiLang);
 
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: inputLangs,
-      outputLanguage: outputLang,
+      expectedInputs:  [{ type: 'text', languages: ['en', uiLang] }],
+      expectedOutputs: [{ type: 'text', languages: [outputLang] }],
     });
     if (availability !== 'available') return null;
 
@@ -116,8 +115,8 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt,
-        expectedInputLanguages: inputLangs,
-        outputLanguage: outputLang,
+        expectedInputs:  [{ type: 'text', languages: ['en', uiLang] }],
+        expectedOutputs: [{ type: 'text', languages: [outputLang] }],
       }),
       makeTimeout(60000),
     ]);
@@ -233,13 +232,10 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
 export async function rankWithAI(candidates, transcript) {
   if (typeof LanguageModel === 'undefined') return null;
 
-  const uiLang = chrome.i18n.getUILanguage().split('-')[0];
-  const inputLangs = uiLang === 'en' ? ['en'] : [uiLang, 'en'];
-
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: inputLangs,
-      outputLanguage: 'en',
+      expectedInputs:  [{ type: 'text', languages: ['en'] }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     if (availability !== 'available') {
       console.debug('[VoiceMarkets] LanguageModel not available:', availability);
@@ -250,8 +246,8 @@ export async function rankWithAI(candidates, transcript) {
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
-        expectedInputLanguages: inputLangs,
-        outputLanguage: 'en',
+        expectedInputs:  [{ type: 'text', languages: ['en'] }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
       }),
       makeTimeout(30000, 'AI timeout'),
     ]);
@@ -319,11 +315,10 @@ export async function checkAIAvailability() {
   }
   try {
     const uiLang = chrome.i18n.getUILanguage().split('-')[0];
-    const inputLangs = uiLang === 'en' ? ['en'] : [uiLang, 'en'];
     const outputLang = resolveOutputLang(uiLang);
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: inputLangs,
-      outputLanguage: outputLang,
+      expectedInputs:  [{ type: 'text', languages: ['en', uiLang] }],
+      expectedOutputs: [{ type: 'text', languages: [outputLang] }],
     });
     console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
   } catch (e) {
