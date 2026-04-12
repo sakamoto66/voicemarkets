@@ -42,14 +42,6 @@ describe('createVoice', () => {
     expect(mockGetUILanguage).toHaveBeenCalled();
   });
 
-  it('returns null when SpeechRecognition is unavailable', () => {
-    // Temporarily remove SpeechRecognition
-    const orig = global.window.SpeechRecognition;
-    global.window.SpeechRecognition = undefined;
-    // Re-import won't work without module reset; just verify API contract
-    global.window.SpeechRecognition = orig;
-  });
-
   it('returns start/stop interface', () => {
     const voice = createVoice(callbacks);
     expect(voice).toHaveProperty('start');

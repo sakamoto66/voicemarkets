@@ -10,7 +10,7 @@
  * silently to keyword-based results.
  */
 
-import { extractKeywords } from './search.js';
+import { extractKeywords, parseAIResponse } from './search.js';
 import { t } from './i18n.js';
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
@@ -19,6 +19,9 @@ const makeTimeout = (ms, label = 'timeout') =>
   new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms));
 
 const SUPPORTED_OUTPUT_LANGS = ['en', 'es', 'ja'];
+
+/** BCP 47 base language tag for the browser UI (e.g. 'ja', 'en', 'zh'). */
+const uiLanguage = () => chrome.i18n.getUILanguage().split('-')[0];
 
 /** Return the best supported output language for the given UI language. */
 const resolveOutputLang = (uiLang) =>
@@ -64,9 +67,9 @@ export async function translateQuery(text, sourceLang, targetLang) {
  * Returns null if the UI language is already English or translation fails.
  */
 export function translateToEnglish(text) {
-  const uiLang = chrome.i18n.getUILanguage().split('-')[0];
-  if (uiLang === 'en') return Promise.resolve(null);
-  return translateQuery(text, uiLang, 'en');
+  const lang = uiLanguage();
+  if (lang === 'en') return Promise.resolve(null);
+  return translateQuery(text, lang, 'en');
 }
 
 /**
@@ -100,10 +103,8 @@ export async function extractKeywordsBilingual(transcript) {
 export async function parseIntent(alternatives, bookmarkDictionary, onStatus = () => {}) {
   if (typeof LanguageModel === 'undefined') return null;
 
-  const uiLang = chrome.i18n.getUILanguage().split('-')[0];
-  const outputLang = resolveOutputLang(uiLang);
-
-  const lmOpts = makeLMOptions(['en', uiLang], outputLang);
+  const lang = uiLanguage();
+  const lmOpts = makeLMOptions(['en', lang], resolveOutputLang(lang));
 
   try {
     const availability = await LanguageModel.availability(lmOpts);
@@ -116,8 +117,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const primaryText     = alternatives[0].transcript;
     const translationHint = await translateToEnglish(primaryText);
 
-    let session;
-    session = await Promise.race([
+    const session = await Promise.race([
       LanguageModel.create({ systemPrompt, ...lmOpts }),
       makeTimeout(60000),
     ]);
@@ -233,7 +233,8 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
 export async function rankWithAI(candidates, transcript) {
   if (typeof LanguageModel === 'undefined') return null;
 
-  const lmOpts = makeLMOptions(['en'], 'en');
+  const lang = uiLanguage();
+  const lmOpts = makeLMOptions(['en', lang], resolveOutputLang(lang));
 
   try {
     const availability = await LanguageModel.availability(lmOpts);
@@ -242,8 +243,7 @@ export async function rankWithAI(candidates, transcript) {
       return null;
     }
 
-    let session;
-    session = await Promise.race([
+    const session = await Promise.race([
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
         ...lmOpts,
@@ -282,20 +282,13 @@ export async function rankWithAI(candidates, transcript) {
 
     console.debug('[VoiceMarkets] AI raw response:', response);
 
-    let parsed;
-    try {
-      parsed = JSON.parse(response);
-      if (!Array.isArray(parsed)) parsed = null;
-    } catch {
-      parsed = null;
-    }
+    const parsed = parseAIResponse(response);
     if (!parsed) return null;
 
     const ranked = parsed
-      .filter(r => r.i != null ? top[r.i - 1] : r.url && top.find(c => c.url === r.url))
+      .filter(r => r.i != null && top[r.i - 1])
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-      .map(r => r.i != null ? top[r.i - 1] : top.find(c => c.url === r.url))
-      .filter(Boolean);
+      .map(r => top[r.i - 1]);
 
     console.debug('[VoiceMarkets] AI ranked count:', ranked.length);
     return ranked.length > 0 ? ranked : null;
@@ -313,9 +306,8 @@ export async function checkAIAvailability() {
     return;
   }
   try {
-    const uiLang = chrome.i18n.getUILanguage().split('-')[0];
-    const outputLang = resolveOutputLang(uiLang);
-    const availability = await LanguageModel.availability(makeLMOptions(['en', uiLang], outputLang));
+    const lang = uiLanguage();
+    const availability = await LanguageModel.availability(makeLMOptions(['en', lang], resolveOutputLang(lang)));
     console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
   } catch (e) {
     console.debug('[VoiceMarkets] Gemini Nano capability check failed:', e);
