@@ -6,7 +6,6 @@ import {
   parseAIResponse,
   getPeriodStartTime,
   extractBookmarkKeywords,
-  hasCJKText,
 } from '../popup/search.js';
 
 // ── extractKeywords ───────────────────────────────────────────────────────────
@@ -253,34 +252,6 @@ describe('getPeriodStartTime', () => {
   });
 });
 
-// ── hasCJKText ────────────────────────────────────────────────────────────────
-describe('hasCJKText', () => {
-  it('returns false for empty string', () => {
-    expect(hasCJKText('')).toBe(false);
-  });
-
-  it('returns false for ASCII-only text', () => {
-    expect(hasCJKText('hello world')).toBe(false);
-    expect(hasCJKText('GitHub Actions CI')).toBe(false);
-  });
-
-  it('returns true for kanji', () => {
-    expect(hasCJKText('東京')).toBe(true);
-  });
-
-  it('returns true for katakana', () => {
-    expect(hasCJKText('ニュース')).toBe(true);
-  });
-
-  it('returns true for hiragana', () => {
-    expect(hasCJKText('ひらがな')).toBe(true);
-  });
-
-  it('returns true for mixed text containing CJK', () => {
-    expect(hasCJKText('GitHub Actions の使い方')).toBe(true);
-  });
-});
-
 // ── extractBookmarkKeywords ───────────────────────────────────────────────────
 describe('extractBookmarkKeywords', () => {
   it('returns empty array for empty input', () => {
@@ -300,10 +271,13 @@ describe('extractBookmarkKeywords', () => {
     expect(result).toContain('サイト');
   });
 
-  it('extracts kanji sequences of 2+ chars as a single token', () => {
-    // No separator — entire kanji string becomes one token
+  it('extracts kanji tokens from compound strings', () => {
+    // Intl.Segmenter applies dictionary-based segmentation, splitting
+    // kanji compounds into meaningful words (e.g. 機械, 学習, 入門)
     const result = extractBookmarkKeywords(['機械学習入門']);
-    expect(result).toContain('機械学習入門');
+    expect(result.length).toBeGreaterThan(0);
+    // All returned tokens must be 2+ chars (CJK minimum length)
+    expect(result.every(w => w.length >= 2)).toBe(true);
   });
 
   it('skips single-char and short tokens that do not qualify', () => {

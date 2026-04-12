@@ -125,8 +125,8 @@ export function getPeriodStartTime(period) {
 
 /**
  * Extract significant keywords from bookmark titles to build a correction dictionary.
- * Keeps English words, katakana sequences, and kanji compounds — the kinds of terms
- * most likely to be misrecognized by speech input.
+ * Uses Intl.Segmenter for language-neutral word tokenization — works for any script
+ * (Latin, CJK, Hangul, Arabic, Thai, etc.) without language-specific special-casing.
  * Returns unique words sorted by frequency (most common first), capped at 100.
  *
  * @param {string[]} titles - Array of bookmark title strings
@@ -134,22 +134,14 @@ export function getPeriodStartTime(period) {
  */
 export function extractBookmarkKeywords(titles) {
   const freq = new Map();
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 
   for (const title of titles) {
     if (!title) continue;
 
-    const words = title
-      .replace(/[|／｜_:：\[\]【】「」『』()（）・…]/g, ' ')
-      .split(/[\s\-\/]+/)
-      .filter(Boolean);
-
-    for (const word of words) {
-      const isEnglish  = /^[a-zA-Z][a-zA-Z0-9.]{1,}$/.test(word);  // 2+ chars, starts with letter
-      const isKatakana = /^[\u30A0-\u30FF]{3,}$/.test(word);         // 3+ katakana chars
-      const isKanji    = /^[\u4E00-\u9FFF]{2,}$/.test(word);         // 2+ kanji chars
-
-      if (isEnglish || isKatakana || isKanji) {
-        freq.set(word, (freq.get(word) || 0) + 1);
+    for (const { segment, isWordLike } of segmenter.segment(title)) {
+      if (isWordLike && segment.length >= minSegmentLength(segment)) {
+        freq.set(segment, (freq.get(segment) || 0) + 1);
       }
     }
   }
@@ -167,15 +159,6 @@ export function extractBookmarkKeywords(titles) {
  * @param {string} text
  * @returns {Array|null} parsed array, or null on any failure
  */
-/**
- * Returns true if the text contains CJK characters (Japanese/Chinese/katakana/fullwidth).
- * @param {string} text
- * @returns {boolean}
- */
-export function hasCJKText(text) {
-  return /[\u3000-\u9fff\uff00-\uffef]/.test(text);
-}
-
 export function parseAIResponse(text) {
   if (!text || typeof text !== 'string') return null;
 
