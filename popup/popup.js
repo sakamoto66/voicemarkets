@@ -276,6 +276,7 @@ async function restoreSearchState() {
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+document.documentElement.lang = chrome.i18n.getUILanguage();
 applyI18n();
 checkAIAvailability();
 restoreSearchState();

@@ -74,7 +74,7 @@ export function renderResults(resultsList, rankingInfo, items, usedAI = false, c
 
     const openItem = async () => {
       try {
-        // 既に開いているタブがあればそこへ切り替える
+        // Switch to an existing tab if the URL is already open
         const allTabs = await chrome.tabs.query({});
         const existingTab = allTabs.find(tab => tab.url === item.url);
         if (existingTab) {
@@ -83,14 +83,14 @@ export function renderResults(resultsList, rankingInfo, items, usedAI = false, c
           return;
         }
 
-        // 現在のタブがホームページ（新しいタブ）ならそこで開く
+        // Reuse the current tab if it is a new-tab page
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (activeTab && (activeTab.url === 'chrome://newtab/' || activeTab.url === 'about:newtab')) {
           await chrome.tabs.update(activeTab.id, { url: item.url });
           return;
         }
 
-        // 新しいタブで開く
+        // Otherwise open in a new tab
         await chrome.tabs.create({ url: item.url });
       } catch (e) {
         console.debug('[VoiceMarkets] openItem failed:', e);

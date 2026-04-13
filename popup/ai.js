@@ -122,7 +122,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const schema = {
       type: 'object',
       properties: {
-        keywords: { type: 'array', items: { type: 'string' }, minItems: 5, maxItems: 20 },
+        keywords: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
       },
       required: ['keywords'],
     };
@@ -155,7 +155,7 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
         ...extractKeywords(a.transcript),
         ...(translationHint && a === usable[0] ? extractKeywords(translationHint) : []),
       ]);
-      intent.keywords = [...new Set([...intent.keywords, ...extra])].slice(0, 20);
+      intent.keywords = [...new Set([...intent.keywords, ...extra])].slice(0, 5);
     }
 
     console.debug('[VoiceMarkets] Parsed intent:', intent);
@@ -184,7 +184,7 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
     '6. Common abbreviations and expansions: JS↔javascript, TS↔typescript, AI↔artificial intelligence, ML↔machine learning',
     '7. Related sub-terms: e.g. react → jsx, component, hook; docker → container, compose',
     '8. Spelling variants and common typos that a speech recognizer might produce',
-    'Target 20 items. Always include both Japanese and English forms for every concept.',
+    'Target 5 items. Always include both Japanese and English forms for every concept.',
     ...(bookmarkDictionary.length > 0 ? [
       '',
       '## known terms from user\'s bookmarks (prefer these spellings when a spoken word sounds similar)',

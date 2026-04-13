@@ -28,7 +28,7 @@ export function createVoice({ onStart, onResult, onError, onEnd }) {
   if (!SpeechRecognition) return null;
 
   const r = new SpeechRecognition();
-  r.lang            = 'ja-JP';
+  r.lang            = chrome.i18n.getUILanguage();
   r.interimResults  = true;
   r.maxAlternatives = 3;
   r.continuous      = false;
