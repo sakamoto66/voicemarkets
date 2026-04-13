@@ -167,10 +167,22 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 }
 
 function buildIntentSystemPrompt(bookmarkDictionary) {
+  const uiLang = chrome.i18n.getUILanguage().split('-')[0];
+  const isEnglish = uiLang === 'en';
+  const nativeLangNote = isEnglish
+    ? 'Bookmarks have titles in English or other languages.'
+    : `Bookmarks have titles in ${uiLang}, English, or both.`;
+  const nativeEquivalentNote = isEnglish
+    ? '4. Native-language equivalent for any English term when the UI language is not English'
+    : `4. ${uiLang} equivalent for any English term (e.g. transliterated form for the UI language)`;
+  const bilingualNote = isEnglish
+    ? 'Target 5 items. Include both the original form and English equivalents for every concept.'
+    : `Target 5 items. Always include both ${uiLang} and English forms for every concept.`;
+
   return [
     'You are a multilingual search keyword expander for a browser bookmark/history search tool.',
-    'Bookmarks have titles in Japanese, English, or both.',
-    'Generate keywords in BOTH languages so the search matches regardless of how the page was titled.',
+    nativeLangNote,
+    'Generate keywords in BOTH the UI language and English so the search matches regardless of how the page was titled.',
     '',
     '## keywords',
     'You are given multiple query candidates for the same user utterance. Extract topic concepts from ALL of them.',
@@ -179,12 +191,12 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
     '1. Drop stop words, grammatical particles, and search meta-terms (history, bookmarks, favorites, search, today, etc.)',
     '2. Original surface form as spoken (from every alternative)',
     '3. English equivalent for any non-English term',
-    '4. Non-English equivalent for any English term (katakana for Japanese context)',
+    nativeEquivalentNote,
     '5. Resolve phonetic brand/product names to their canonical spelling (e.g. spoken sound → "github", "react", "typescript")',
     '6. Common abbreviations and expansions: JS↔javascript, TS↔typescript, AI↔artificial intelligence, ML↔machine learning',
     '7. Related sub-terms: e.g. react → jsx, component, hook; docker → container, compose',
     '8. Spelling variants and common typos that a speech recognizer might produce',
-    'Target 5 items. Always include both Japanese and English forms for every concept.',
+    bilingualNote,
     ...(bookmarkDictionary.length > 0 ? [
       '',
       '## known terms from user\'s bookmarks (prefer these spellings when a spoken word sounds similar)',
