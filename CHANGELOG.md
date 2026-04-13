@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Voice recognition language now dynamically follows `chrome.i18n.getUILanguage()` instead of hardcoded `ja-JP`
+- `LanguageModel.availability()` / `create()` now use `expectedInputs/expectedOutputs` array format (current Chrome built-in AI API)
+- `parseIntent()` return type simplified to `{ keywords }` — period filter and source selection auto-detection removed
+- `buildIntentSystemPrompt()` generates bilingual prompts for any UI language, not only Japanese
+- `manifest.json` `default_locale` changed from `ja` to `en`
+- `<html lang>` set dynamically via `document.documentElement.lang = chrome.i18n.getUILanguage()` at startup
+
+### Fixed
+- `parseIntent()`: when all speech recognition alternatives have confidence < 0.1, now falls back to `alternatives[0]` instead of passing an empty candidate list to the model
+
 ## [0.2.0] — 2026-04-11
 
 ### Added

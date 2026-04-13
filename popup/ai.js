@@ -102,11 +102,11 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 
     onStatus(t('status_loading_ai'));
     const systemPrompt = buildIntentSystemPrompt(bookmarkDictionary);
-    console.debug('[VoiceMarkets] parseIntent systemPrompt:\n', systemPrompt);
 
     // Use all alternatives with confidence >= 0.1 as keyword sources
     const usable      = alternatives.filter(a => a.confidence >= 0.1);
-    const primaryText = usable[0]?.transcript ?? alternatives[0].transcript;
+    if (usable.length === 0) usable.push(alternatives[0]);
+    const primaryText = usable[0].transcript;
     const translationHint = await translateToOppositeLanguage(primaryText);
 
     let session;
