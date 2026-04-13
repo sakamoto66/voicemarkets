@@ -186,7 +186,7 @@ function buildIntentSystemPrompt(bookmarkDictionary) {
     '',
     '## keywords',
     'You are given multiple query candidates for the same user utterance. Extract topic concepts from ALL of them.',
-    'NEVER include words from the prompt structure itself (e.g. "query", "candidate", "translation", "confidence", "alternative", "recognition", "speech", language codes like "JA"/"EN").',
+    `NEVER include words from the prompt structure itself (e.g. "query", "candidate", "translation", "confidence", "alternative", "recognition", "speech", language codes like "${uiLang.toUpperCase()}"/"EN").`,
     'For every topic concept found across any candidate, generate ALL of the following variants:',
     '1. Drop stop words, grammatical particles, and search meta-terms (history, bookmarks, favorites, search, today, etc.)',
     '2. Original surface form as spoken (from every alternative)',
