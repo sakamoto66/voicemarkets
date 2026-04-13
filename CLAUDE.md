@@ -42,8 +42,8 @@ Unit-testable functions: `scoreItem(item, keywords)`, `extractKeywords(transcrip
 4. Score by keyword frequency + recency, keep top 20 candidates
 
 **Stage 2 — Gemini Nano Semantic Ranking (optional)**
-- Check `window.ai?.languageModel` availability before calling
-- Pass top candidates + original transcript; prompt returns JSON array with title, url, score
+- Check `LanguageModel` availability before calling (Chrome built-in AI, not `window.ai`)
+- Pass top 5 candidates + original transcript; prompt returns JSON array with title, url, score
 - If unavailable or fails: fall back silently to Stage 1 results
 - Display top 5 results with scores
 
@@ -52,12 +52,12 @@ Unit-testable functions: `scoreItem(item, keywords)`, `extractKeywords(transcrip
 - **Gemini Nano does not guarantee valid JSON** — always wrap `JSON.parse()` in try/catch and strip markdown code fences before parsing. Fallback to Stage 1 on any parse error.
 - **Web Speech API is interrupted on popup blur** — attach `window.onblur` to stop/cleanup recognition when the popup loses focus.
 - **Japanese history search**: `chrome.history.search({ text: '...' })` does not work for Japanese text. Always fetch with `text: ''` and filter client-side.
-- **Token budget**: Measure actual token counts with real data before Phase 3 ships. Default of 20 candidates is a placeholder; hitting the model's context limit causes silent failure.
+- **Token budget**: `rankWithAI` uses top 5 candidates to keep prompts short. At 5 candidates the prompt is ~500–1,500 chars (~150–400 tokens) — well within Gemini Nano's context limit. If increasing, measure actual token counts first; hitting the limit causes silent failure.
 - **Web Speech API in Chrome routes through Google's servers** — not truly offline despite no user-configured API key. This is an accepted tradeoff.
 
 ## Current Implementation Status
 
-- **Phase 1** (Voice input scaffold): **Done** — Web Speech API, ja-JP, pulse animation
+- **Phase 1** (Voice input scaffold): **Done** — Web Speech API (lang = `chrome.i18n.getUILanguage()`), pulse animation
 - **Phase 2** (Search + keyword ranking): **Done** — bookmark + history fetch, dedup, score, top-20
 - **Phase 3** (Gemini Nano ranking): **Done** — rankWithAI with silent fallback; token budget logged via console.debug (manual measurement still pending with real data)
 - **Phase 4** (Error UX): **Done** — all error states defined; AI/keyword badge shown in results footer

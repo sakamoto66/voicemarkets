@@ -2,11 +2,12 @@
 
 ## Phase 3
 - [x] **Gemini Nano トークン予算の実測**
-  - What: 実際の payload (transcript + 20件候補) のトークン数を計測して候補数を調整
-  - Why: 現在20件は仮定値。モデルのコンテキスト上限に当たると AI 呼び出しがサイレント失敗する
+  - What: 実際の payload (transcript + 候補) のトークン数を計測して候補数を調整
+  - Why: モデルのコンテキスト上限に当たると AI 呼び出しがサイレント失敗する
   - Status: `console.debug('[VoiceMarkets] AI prompt length (chars):', ...)` を追加済み。
     Chromeの開発者ツール Console でポップアップを開いて実測すること。
-    20件候補でプロンプト全体が概ね 2,000–4,000 chars → ~500–1,000 tokens 見込み。
+    AI ランキング (rankWithAI) は上位 5 件候補のみ使用。
+    5件候補でプロンプト全体が概ね 500–1,500 chars → ~150–400 tokens 見込み。
 
 ## Phase 4
 - [x] **エラー UX 仕様化と実装**

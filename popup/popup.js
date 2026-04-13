@@ -116,27 +116,25 @@ async function runSearch(input) {
   status(t('status_loading_ai'));
 
   try {
-    // Stage 0: AI intent parsing — period, sources, keyword expansion
+    // Stage 0: AI intent parsing — keyword expansion from all alternatives
     const intent = await parseIntent(alternatives, bookmarkDictionary, status);
-    if (intent) applyIntentToUI(intent);
 
-    const selectedIndex = (intent?.selected != null && alternatives[intent.selected - 1])
-      ? intent.selected - 1
-      : 0;
-    const bestTranscript = alternatives[selectedIndex].transcript;
-    const corrected      = selectedIndex > 0;
+    const bestTranscript = alternatives[0].transcript;
     const lowConfidence  = alternatives[0].confidence < 0.6;
 
     transcriptEl.value = bestTranscript;
-    transcriptEl.classList.toggle('low-confidence', lowConfidence && !corrected);
+    transcriptEl.classList.toggle('low-confidence', lowConfidence);
+
+    // Fallback: extract keywords from all alternatives with confidence >= 0.1
+    const usableTranscripts = alternatives
+      .filter(a => a.confidence >= 0.1)
+      .map(a => a.transcript);
 
     const keywords = (intent?.keywords?.length > 0)
       ? intent.keywords
-      : await extractKeywordsBilingual(bestTranscript);
+      : [...new Set((await Promise.all(usableTranscripts.map(extractKeywordsBilingual))).flat())];
 
-    // Allow empty keywords only when AI detected a non-'all' period (temporal-only query)
-    const hasTemporalIntent = intent?.period && intent.period !== 'all';
-    if (keywords.length === 0 && !hasTemporalIntent) {
+    if (keywords.length === 0) {
       status(t('error_no_recognition'));
       return;
     }
@@ -160,8 +158,8 @@ async function runSearch(input) {
 
     const displayItems = ranked.slice(0, 5);
     const usedAI = aiResult !== null;
-    renderResults(resultsList, rankingInfo, displayItems, usedAI, corrected);
-    saveSearchState(displayItems, bestTranscript, usedAI, corrected);
+    renderResults(resultsList, rankingInfo, displayItems, usedAI, false);
+    saveSearchState(displayItems, bestTranscript, usedAI, false);
     status('');
   } catch (_) {
     status(t('error_search_failed'));
@@ -222,24 +220,6 @@ function fetchHistory(keywords) {
     .map(item => ({ ...item, _source: 'history' }));
 }
 
-// ── Intent → UI ───────────────────────────────────────────────────────────────
-function applyIntentToUI(intent) {
-  if (intent.period) {
-    currentPeriod = intent.period;
-    for (const p of periodPills) {
-      p.classList.toggle('active', p.dataset.period === intent.period);
-    }
-  }
-  if (intent.sources?.length > 0) {
-    activeSources = new Set(intent.sources);
-    for (const t of sourceToggles) {
-      const active = activeSources.has(t.dataset.source);
-      t.classList.toggle('active', active);
-      t.setAttribute('aria-pressed', String(active));
-    }
-  }
-}
-
 // ── Event listeners ───────────────────────────────────────────────────────────
 micBtn.addEventListener('click', () => {
   if (isListening) {
@@ -296,6 +276,7 @@ async function restoreSearchState() {
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+document.documentElement.lang = chrome.i18n.getUILanguage();
 applyI18n();
 checkAIAvailability();
 restoreSearchState();

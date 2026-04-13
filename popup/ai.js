@@ -18,6 +18,13 @@ import { t } from './i18n.js';
 const makeTimeout = (ms, label = 'timeout') =>
   new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms));
 
+/** ['en'] or ['en', '<ui-lang>'] — deduped, always includes 'en'. */
+const inputLanguages = () => {
+  const raw = chrome.i18n.getUILanguage().split('-')[0]; // 'ja-JP' → 'ja'
+  const ui = /^[a-z]{2,8}$/i.test(raw) ? raw.toLowerCase() : 'en'; // sanitize BCP 47 subtag
+  return ui === 'en' ? ['en'] : ['en', ui];
+};
+
 // ── Translator API ─────────────────────────────────────────────────────────────
 
 /**
@@ -25,8 +32,8 @@ const makeTimeout = (ms, label = 'timeout') =>
  * Returns the translated string, or null if unavailable / failed.
  *
  * @param {string} text
- * @param {'ja'|'en'} sourceLang
- * @param {'ja'|'en'} targetLang
+ * @param {string} sourceLang - BCP 47 language code (e.g. 'en', 'ja', 'ko')
+ * @param {string} targetLang - BCP 47 language code (e.g. 'en', 'ja', 'ko')
  * @returns {Promise<string|null>}
  */
 export async function translateQuery(text, sourceLang, targetLang) {
@@ -47,11 +54,14 @@ export async function translateQuery(text, sourceLang, targetLang) {
   }
 }
 
-/** Translate to the opposite language (ja↔en), auto-detecting source. */
+/** Translate to the opposite language (ui-lang↔en), auto-detecting source. */
 export function translateToOppositeLanguage(text) {
+  const raw = chrome.i18n.getUILanguage().split('-')[0];
+  const ui = /^[a-z]{2,8}$/i.test(raw) ? raw.toLowerCase() : 'en';
+  if (ui === 'en') return Promise.resolve(null);
   return hasCJKText(text)
-    ? translateQuery(text, 'ja', 'en')
-    : translateQuery(text, 'en', 'ja');
+    ? translateQuery(text, ui, 'en')
+    : translateQuery(text, 'en', ui);
 }
 
 /**
@@ -75,36 +85,39 @@ export async function extractKeywordsBilingual(transcript) {
 
 /**
  * Parse search intent from voice recognition alternatives using Gemini Nano.
- * Returns { selected, period, keywords, sources } on success, null if unavailable / failed.
+ * Returns { keywords } on success, null if unavailable / failed.
  *
  * @param {Array<{transcript: string, confidence: number}>} alternatives
  * @param {string[]} bookmarkDictionary
  * @param {(msg: string) => void} onStatus
- * @returns {Promise<{selected: number, period: string, keywords: string[], sources: string[]}|null>}
+ * @returns {Promise<{keywords: string[]}|null>}
  */
 export async function parseIntent(alternatives, bookmarkDictionary, onStatus = () => {}) {
   if (typeof LanguageModel === 'undefined') return null;
+  if (!alternatives || alternatives.length === 0) return null;
 
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: ['ja', 'en'],
-      expectedOutputLanguages: ['en'],
+      expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     if (availability !== 'available') return null;
 
     onStatus(t('status_loading_ai'));
     const systemPrompt = buildIntentSystemPrompt(bookmarkDictionary);
-    console.debug('[VoiceMarkets] parseIntent systemPrompt:\n', systemPrompt);
 
-    const primaryText     = alternatives[0].transcript;
+    // Use all alternatives with confidence >= 0.1 as keyword sources
+    const usable      = alternatives.filter(a => a.confidence >= 0.1);
+    if (usable.length === 0) usable.push(alternatives[0]);
+    const primaryText = usable[0].transcript;
     const translationHint = await translateToOppositeLanguage(primaryText);
 
     let session;
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt,
-        expectedInputLanguages: ['ja', 'en'],
-        expectedOutputLanguages: ['en'],
+        expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
       }),
       makeTimeout(60000),
     ]);
@@ -112,22 +125,19 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const schema = {
       type: 'object',
       properties: {
-        selected: { type: 'number' },
-        period:   { type: 'string', enum: ['all', '1h', '24h', '1w', '1m', '1y'] },
-        keywords: { type: 'array', items: { type: 'string' }, minItems: 5, maxItems: 20 },
-        sources:  { type: 'array', items: { type: 'string', enum: ['bookmarks', 'history'] } },
+        keywords: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
       },
-      required: ['selected', 'period', 'keywords', 'sources'],
+      required: ['keywords'],
     };
 
     onStatus(t('status_parsing_query'));
-    const altLines = alternatives
+    const altLines = usable
       .map((a, i) => `${i + 1}. "${a.transcript.slice(0, 80)}" (confidence: ${a.confidence.toFixed(2)})`)
       .join('\n');
     const translationLine = translationHint
-      ? `\nTranslation (${hasCJKText(primaryText) ? 'EN' : 'JA'}) — you MUST include words from this in keywords: "${translationHint}"`
+      ? `\nAlso expand keywords using this translation: "${translationHint}"`
       : '';
-    const intentPrompt = `Speech recognition alternatives:\n${altLines}${translationLine}`;
+    const intentPrompt = `User query candidates:\n${altLines}${translationLine}`;
     console.debug('[VoiceMarkets] parseIntent prompt:', intentPrompt);
 
     let response;
@@ -143,11 +153,12 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
     const intent = JSON.parse(response);
 
     if (Array.isArray(intent.keywords)) {
-      const extra = [
-        ...extractKeywords(primaryText),
-        ...(translationHint ? extractKeywords(translationHint) : []),
-      ];
-      intent.keywords = [...new Set([...intent.keywords, ...extra])].slice(0, 20);
+      // Merge AI keywords with keyword-extracted terms from all usable alternatives
+      const extra = usable.flatMap(a => [
+        ...extractKeywords(a.transcript),
+        ...(translationHint && a === usable[0] ? extractKeywords(translationHint) : []),
+      ]);
+      intent.keywords = [...new Set([...intent.keywords, ...extra])].slice(0, 5);
     }
 
     console.debug('[VoiceMarkets] Parsed intent:', intent);
@@ -159,39 +170,37 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 }
 
 function buildIntentSystemPrompt(bookmarkDictionary) {
+  const raw = chrome.i18n.getUILanguage().split('-')[0];
+  const uiLang = /^[a-z]{2,8}$/i.test(raw) ? raw.toLowerCase() : 'en';
+  const isEnglish = uiLang === 'en';
+  const nativeLangNote = isEnglish
+    ? 'Bookmarks have titles in English or other languages.'
+    : `Bookmarks have titles in ${uiLang}, English, or both.`;
+  const nativeEquivalentNote = isEnglish
+    ? '4. Native-language equivalent for any English term when the UI language is not English'
+    : `4. ${uiLang} equivalent for any English term (e.g. transliterated form for the UI language)`;
+  const bilingualNote = isEnglish
+    ? 'Target 5 items. Include both the original form and English equivalents for every concept.'
+    : `Target 5 items. Always include both ${uiLang} and English forms for every concept.`;
+
   return [
     'You are a multilingual search keyword expander for a browser bookmark/history search tool.',
-    'Bookmarks have titles in Japanese, English, or both.',
-    'Generate keywords in BOTH languages so the search matches regardless of how the page was titled.',
-    '',
-    '## selected',
-    'Pick the most natural-sounding speech-recognition alternative (1-based index).',
-    '',
-    '## period',
-    'Detect time range from the chosen alternative:',
-    '  "直近" "さっき" "今さっき" → 1h',
-    '  "今日" "今朝" "昨日" "最近" → 24h',
-    '  "今週" "先週" → 1w | "今月" → 1m | "今年" → 1y | otherwise → all',
+    nativeLangNote,
+    'Generate keywords in BOTH the UI language and English so the search matches regardless of how the page was titled.',
     '',
     '## keywords',
-    'For every topic concept in the query, generate ALL of the following variants:',
-    '1. Drop stop/meta words: の,を,に,は,た,こと,見た,今日,履歴,ブックマーク,お気に入り,検索,開いた',
-    '2. Original surface form (e.g. "ニュース", "react")',
-    '3. English equivalent for Japanese ("ニュース"→"news", "設定"→"settings", "入門"→"introduction", "機械学習"→"machine learning")',
-    '4. Japanese/katakana equivalent for English ("news"→"ニュース", "settings"→"設定", "react"→"リアクト")',
-    '5. Resolve katakana to actual English brand/product name:',
-    '   "ギットハブ"→"github" | "リアクト"→"react" | "タイプスクリプト"→"typescript"',
-    '   "ツイッター"→"twitter" | "ユーチューブ"→"youtube" | "ネクスト"→"nextjs"',
-    '   "パイソン"→"python" | "ドッカー"→"docker" | "クロード"→"claude" | "オープンエーアイ"→"openai"',
-    '6. Common abbreviations and expansions: "JS"↔"javascript", "TS"↔"typescript", "AI"↔"artificial intelligence", "ML"↔"machine learning"',
-    '7. Related sub-terms: e.g. "react" → also add "jsx", "component", "hook"; "docker" → "container", "compose"',
+    'You are given multiple query candidates for the same user utterance. Extract topic concepts from ALL of them.',
+    `NEVER include words from the prompt structure itself (e.g. "query", "candidate", "translation", "confidence", "alternative", "recognition", "speech", language codes like "${uiLang.toUpperCase()}"/"EN").`,
+    'For every topic concept found across any candidate, generate ALL of the following variants:',
+    '1. Drop stop words, grammatical particles, and search meta-terms (history, bookmarks, favorites, search, today, etc.)',
+    '2. Original surface form as spoken (from every alternative)',
+    '3. English equivalent for any non-English term',
+    nativeEquivalentNote,
+    '5. Resolve phonetic brand/product names to their canonical spelling (e.g. spoken sound → "github", "react", "typescript")',
+    '6. Common abbreviations and expansions: JS↔javascript, TS↔typescript, AI↔artificial intelligence, ML↔machine learning',
+    '7. Related sub-terms: e.g. react → jsx, component, hook; docker → container, compose',
     '8. Spelling variants and common typos that a speech recognizer might produce',
-    'Target 20 items. Always include both Japanese and English forms for every concept.',
-    '',
-    '## sources',
-    '["bookmarks"] if user says お気に入り/ブックマーク/bookmark/favorite.',
-    '["history"] if user says 履歴/見た/visited/閲覧/browsed.',
-    '["bookmarks","history"] otherwise.',
+    bilingualNote,
     ...(bookmarkDictionary.length > 0 ? [
       '',
       '## known terms from user\'s bookmarks (prefer these spellings when a spoken word sounds similar)',
@@ -216,8 +225,8 @@ export async function rankWithAI(candidates, transcript) {
 
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: ['ja', 'en'],
-      expectedOutputLanguages: ['en'],
+      expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     if (availability !== 'available') {
       console.debug('[VoiceMarkets] LanguageModel not available:', availability);
@@ -228,8 +237,8 @@ export async function rankWithAI(candidates, transcript) {
     session = await Promise.race([
       LanguageModel.create({
         systemPrompt: 'Rank browser history items by relevance to a query. Output ONLY a JSON array [{url,score}] sorted by score descending.',
-        expectedInputLanguages: ['ja', 'en'],
-        expectedOutputLanguages: ['en'],
+        expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
       }),
       makeTimeout(30000, 'AI timeout'),
     ]);
@@ -292,13 +301,13 @@ export async function rankWithAI(candidates, transcript) {
 
 export async function checkAIAvailability() {
   if (typeof LanguageModel === 'undefined') {
-    console.debug('[VoiceMarkets] LanguageModel unavailable — キーワード順で動作します');
+    console.debug('[VoiceMarkets] LanguageModel unavailable — falling back to keyword ranking');
     return;
   }
   try {
     const availability = await LanguageModel.availability({
-      expectedInputLanguages: ['ja', 'en'],
-      expectedOutputLanguages: ['en'],
+      expectedInputs:  [{ type: 'text', languages: inputLanguages() }],
+      expectedOutputs: [{ type: 'text', languages: ['en'] }],
     });
     console.debug('[VoiceMarkets] Gemini Nano availability:', availability);
   } catch (e) {
