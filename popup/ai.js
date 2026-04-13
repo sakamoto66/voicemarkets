@@ -20,7 +20,8 @@ const makeTimeout = (ms, label = 'timeout') =>
 
 /** ['en'] or ['en', '<ui-lang>'] — deduped, always includes 'en'. */
 const inputLanguages = () => {
-  const ui = chrome.i18n.getUILanguage().split('-')[0]; // 'ja-JP' → 'ja'
+  const raw = chrome.i18n.getUILanguage().split('-')[0]; // 'ja-JP' → 'ja'
+  const ui = /^[a-z]{2,8}$/i.test(raw) ? raw.toLowerCase() : 'en'; // sanitize BCP 47 subtag
   return ui === 'en' ? ['en'] : ['en', ui];
 };
 
@@ -55,7 +56,8 @@ export async function translateQuery(text, sourceLang, targetLang) {
 
 /** Translate to the opposite language (ui-lang↔en), auto-detecting source. */
 export function translateToOppositeLanguage(text) {
-  const ui = chrome.i18n.getUILanguage().split('-')[0];
+  const raw = chrome.i18n.getUILanguage().split('-')[0];
+  const ui = /^[a-z]{2,8}$/i.test(raw) ? raw.toLowerCase() : 'en';
   if (ui === 'en') return Promise.resolve(null);
   return hasCJKText(text)
     ? translateQuery(text, ui, 'en')
@@ -92,6 +94,7 @@ export async function extractKeywordsBilingual(transcript) {
  */
 export async function parseIntent(alternatives, bookmarkDictionary, onStatus = () => {}) {
   if (typeof LanguageModel === 'undefined') return null;
+  if (!alternatives || alternatives.length === 0) return null;
 
   try {
     const availability = await LanguageModel.availability({
@@ -167,7 +170,8 @@ export async function parseIntent(alternatives, bookmarkDictionary, onStatus = (
 }
 
 function buildIntentSystemPrompt(bookmarkDictionary) {
-  const uiLang = chrome.i18n.getUILanguage().split('-')[0];
+  const raw = chrome.i18n.getUILanguage().split('-')[0];
+  const uiLang = /^[a-z]{2,8}$/i.test(raw) ? raw.toLowerCase() : 'en';
   const isEnglish = uiLang === 'en';
   const nativeLangNote = isEnglish
     ? 'Bookmarks have titles in English or other languages.'
