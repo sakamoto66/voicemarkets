@@ -91,15 +91,11 @@ async function ensureMicPermission() {
   }
 
   if (state === 'prompt') {
-    // Calling getUserMedia from the extension popup shows
-    // "[Extension] wants to use your microphone" dialog.
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(t => t.stop());
-    } catch {
-      showMicPermissionError();
-      return false;
-    }
+    // Chrome extension popups cannot reliably show the getUserMedia dialog.
+    // Open a dedicated full-page tab where the dialog works correctly.
+    chrome.tabs.create({ url: chrome.runtime.getURL('popup/permission.html') });
+    status(t('status_mic_permission_needed'));
+    return false;
   }
 
   return true;

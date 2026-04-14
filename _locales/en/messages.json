@@ -31,6 +31,7 @@
 
   "error_no_speech_api":       { "message": "This browser does not support speech recognition" },
   "status_listening":          { "message": "Listening…" },
+  "status_mic_permission_needed": { "message": "Microphone permission needed. Click Allow in the tab that just opened." },
   "error_mic_permission":      { "message": "Microphone access denied." },
   "error_mic_open_settings":   { "message": "Open Chrome settings to allow" },
   "error_no_speech":      { "message": "No speech detected. Please try again" },

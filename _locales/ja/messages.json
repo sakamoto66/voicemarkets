@@ -31,6 +31,7 @@
 
   "error_no_speech_api":       { "message": "このブラウザは音声認識に対応していません" },
   "status_listening":          { "message": "聞いています…" },
+  "status_mic_permission_needed": { "message": "マイクの許可が必要です。開いたタブで「許可」を押してください" },
   "error_mic_permission":      { "message": "マイクが許可されていません。" },
   "error_mic_open_settings":   { "message": "Chrome の設定で許可する" },
   "error_no_speech":      { "message": "音声が検出されませんでした。もう一度試してください" },
