@@ -29,10 +29,10 @@
   "badge_keyword":   { "message": "Keyword" },
   "badge_corrected": { "message": "Corrected" },
 
-  "error_no_speech_api":    { "message": "This browser does not support speech recognition" },
-  "status_requesting_mic":  { "message": "Requesting microphone permission…" },
-  "status_listening":       { "message": "Listening…" },
-  "error_mic_permission":   { "message": "Microphone access denied. Please allow it in Chrome settings" },
+  "error_no_speech_api":       { "message": "This browser does not support speech recognition" },
+  "status_listening":          { "message": "Listening…" },
+  "error_mic_permission":      { "message": "Microphone access denied." },
+  "error_mic_open_settings":   { "message": "Open Chrome settings to allow" },
   "error_no_speech":      { "message": "No speech detected. Please try again" },
   "error_speech_recognition": {
     "message": "Speech recognition error: $ERROR$",

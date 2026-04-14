@@ -39,7 +39,72 @@ let historyCache       = [];
 // ── Shorthand ─────────────────────────────────────────────────────────────────
 const status = (text, isError = false) => setStatus(statusEl, text, isError);
 
+function showMicPermissionError() {
+  statusEl.textContent = '';
+  statusEl.style.color = '#ef4444';
+
+  const msg = document.createElement('span');
+  msg.textContent = t('error_mic_permission') + ' ';
+
+  const link = document.createElement('a');
+  link.textContent = t('error_mic_open_settings');
+  link.href = '#';
+  link.style.cssText = 'color:inherit;text-decoration:underline;cursor:pointer';
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    // Open the site-specific settings for this extension so the user
+    // can toggle the mic permission directly without hunting through the list.
+    const extOrigin = encodeURIComponent(`chrome-extension://${chrome.runtime.id}`);
+    chrome.tabs.create({
+      url: `chrome://settings/content/siteDetails?site=${extOrigin}`,
+    });
+  });
+
+  statusEl.appendChild(msg);
+  statusEl.appendChild(link);
+}
+
 // ── Voice recognition ─────────────────────────────────────────────────────────
+
+/**
+ * Check mic permission state and, if unprompted, show the browser permission
+ * dialog via getUserMedia before starting Web Speech API.
+ *
+ * Returns true if we can proceed, false if permission is denied.
+ */
+async function ensureMicPermission() {
+  // Permissions API not available (non-standard environment)
+  if (!navigator.permissions) return true;
+
+  let state;
+  try {
+    const result = await navigator.permissions.query({ name: 'microphone' });
+    state = result.state;
+  } catch {
+    // query not supported for 'microphone' — fall through to Web Speech API
+    return true;
+  }
+
+  if (state === 'denied') {
+    showMicPermissionError();
+    return false;
+  }
+
+  if (state === 'prompt') {
+    // Calling getUserMedia from the extension popup shows
+    // "[Extension] wants to use your microphone" dialog.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => t.stop());
+    } catch {
+      showMicPermissionError();
+      return false;
+    }
+  }
+
+  return true;
+}
+
 async function startListening() {
   if (isListening) return;
 
@@ -48,19 +113,8 @@ async function startListening() {
     return;
   }
 
-  // Request microphone permission explicitly so the browser shows its native
-  // permission dialog. We immediately release the stream — we only need the
-  // grant, not the raw audio; Web Speech API handles the actual capture.
-  try {
-    status(t('status_requesting_mic'));
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(track => track.stop());
-  } catch (err) {
-    status(t('error_mic_permission'), true);
-    return;
-  }
-
-  status('');
+  const canListen = await ensureMicPermission();
+  if (!canListen) return;
 
   currentVoice = createVoice({
     onStart: () => {
@@ -87,7 +141,7 @@ async function startListening() {
       isListening = false;
       micBtn.classList.remove('listening');
       if (event.error === 'not-allowed') {
-        status(t('error_mic_permission'), true);
+        showMicPermissionError();
       } else if (event.error === 'no-speech') {
         status(t('error_no_speech'));
       } else {
