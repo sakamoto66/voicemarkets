@@ -18,6 +18,7 @@ import { t, applyI18n } from './i18n.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const micBtn        = document.getElementById('micBtn');
+const searchBtn     = document.getElementById('searchBtn');
 const statusEl      = document.getElementById('status');
 const spinnerEl     = document.getElementById('spinner');
 const transcriptEl  = document.getElementById('transcript');
@@ -39,13 +40,27 @@ let historyCache       = [];
 const status = (text, isError = false) => setStatus(statusEl, text, isError);
 
 // ── Voice recognition ─────────────────────────────────────────────────────────
-function startListening() {
+async function startListening() {
   if (isListening) return;
 
   if (!SpeechRecognition) {
     status(t('error_no_speech_api'), true);
     return;
   }
+
+  // Request microphone permission explicitly so the browser shows its native
+  // permission dialog. We immediately release the stream — we only need the
+  // grant, not the raw audio; Web Speech API handles the actual capture.
+  try {
+    status(t('status_requesting_mic'));
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => track.stop());
+  } catch (err) {
+    status(t('error_mic_permission'), true);
+    return;
+  }
+
+  status('');
 
   currentVoice = createVoice({
     onStart: () => {
@@ -257,6 +272,15 @@ transcriptEl.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (isListening) stopListening();
     runSearch(transcriptEl.value.trim());
+  }
+});
+
+searchBtn.addEventListener('click', () => {
+  if (transcriptEl.value.trim()) {
+    if (isListening) stopListening();
+    runSearch(transcriptEl.value.trim());
+  } else {
+    transcriptEl.focus();
   }
 });
 

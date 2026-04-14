@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1] — 2026-04-14
+
+### Changed
+- Search input field now prominently accepts typed queries from the first open — placeholder updated to "Search bookmarks & history…" (was "Edit result and press Enter to search again")
+- Initial status message updated to hint at both mic and keyboard input
+- Added a search button (magnifying glass) inside the input field for mouse/touch-triggered searches without pressing Enter
+- Input field styled as a visible search box (bordered, rounded) so its purpose is immediately apparent
+
 ## [0.3.0] — 2026-04-13
 
 ### Changed

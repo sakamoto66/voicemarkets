@@ -3,9 +3,10 @@
   "app_description": { "message": "音声でブックマーク・履歴を検索して開く Chrome 拡張機能" },
 
   "mic_btn_label":          { "message": "音声入力開始" },
-  "status_idle":            { "message": "クリックして話す" },
-  "transcript_placeholder": { "message": "認識結果を編集してEnterで再検索" },
-  "transcript_aria_label":  { "message": "認識テキスト（編集可能）" },
+  "search_btn_label":       { "message": "検索" },
+  "status_idle":            { "message": "マイクをタップするか、ここに入力して検索" },
+  "transcript_placeholder": { "message": "ブックマーク・履歴を検索…" },
+  "transcript_aria_label":  { "message": "検索キーワード（入力または音声入力）" },
 
   "filter_period_label":    { "message": "期間" },
   "period_filter_aria":     { "message": "期間フィルター" },
@@ -28,9 +29,10 @@
   "badge_keyword":   { "message": "キーワード順" },
   "badge_corrected": { "message": "補正" },
 
-  "error_no_speech_api":  { "message": "このブラウザは音声認識に対応していません" },
-  "status_listening":     { "message": "聞いています…" },
-  "error_mic_permission": { "message": "マイク許可が必要です。chrome://settings/content/microphone で許可してください" },
+  "error_no_speech_api":    { "message": "このブラウザは音声認識に対応していません" },
+  "status_requesting_mic":  { "message": "マイクの許可を求めています…" },
+  "status_listening":       { "message": "聞いています…" },
+  "error_mic_permission":   { "message": "マイクが許可されませんでした。Chrome の設定から許可してください" },
   "error_no_speech":      { "message": "音声が検出されませんでした。もう一度試してください" },
   "error_speech_recognition": {
     "message": "音声認識エラー: $ERROR$",

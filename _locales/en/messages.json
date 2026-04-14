@@ -3,9 +3,10 @@
   "app_description": { "message": "Search and open bookmarks & history with your voice" },
 
   "mic_btn_label":          { "message": "Start voice input" },
-  "status_idle":            { "message": "Click to speak" },
-  "transcript_placeholder": { "message": "Edit result and press Enter to search again" },
-  "transcript_aria_label":  { "message": "Recognized text (editable)" },
+  "search_btn_label":       { "message": "Search" },
+  "status_idle":            { "message": "Tap mic to speak, or type here to search" },
+  "transcript_placeholder": { "message": "Search bookmarks & history…" },
+  "transcript_aria_label":  { "message": "Search query (type or use voice input)" },
 
   "filter_period_label":    { "message": "Period" },
   "period_filter_aria":     { "message": "Period filter" },
@@ -28,9 +29,10 @@
   "badge_keyword":   { "message": "Keyword" },
   "badge_corrected": { "message": "Corrected" },
 
-  "error_no_speech_api":  { "message": "This browser does not support speech recognition" },
-  "status_listening":     { "message": "Listening…" },
-  "error_mic_permission": { "message": "Microphone permission required. Please allow at chrome://settings/content/microphone" },
+  "error_no_speech_api":    { "message": "This browser does not support speech recognition" },
+  "status_requesting_mic":  { "message": "Requesting microphone permission…" },
+  "status_listening":       { "message": "Listening…" },
+  "error_mic_permission":   { "message": "Microphone access denied. Please allow it in Chrome settings" },
   "error_no_speech":      { "message": "No speech detected. Please try again" },
   "error_speech_recognition": {
     "message": "Speech recognition error: $ERROR$",

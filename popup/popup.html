@@ -24,9 +24,17 @@
         <span id="spinner" class="spinner hidden" aria-hidden="true"></span>
         <p id="status" class="status" data-i18n="status_idle"></p>
       </div>
-      <input id="transcript" class="transcript" type="text"
-             data-i18n-placeholder="transcript_placeholder"
-             data-i18n-aria="transcript_aria_label" />
+      <div class="search-row">
+        <input id="transcript" class="transcript" type="text"
+               data-i18n-placeholder="transcript_placeholder"
+               data-i18n-aria="transcript_aria_label" />
+        <button id="searchBtn" class="search-btn" data-i18n-aria="search_btn_label">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"/>
+            <line x1="16.5" y1="16.5" x2="22" y2="22"/>
+          </svg>
+        </button>
+      </div>
     </main>
 
     <!-- Filters: period + source -->

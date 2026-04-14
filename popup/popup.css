@@ -121,35 +121,67 @@ body {
   to { transform: rotate(360deg); }
 }
 
+.search-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+}
+
+.search-row:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  background: #fff;
+}
+
 .transcript {
   font-size: 13px;
   color: #4b5563;
-  text-align: center;
+  flex: 1;
   min-height: 18px;
-  font-style: italic;
-  width: 100%;
   border: none;
-  border-bottom: 1px solid transparent;
-  border-radius: 0;
   background: transparent;
   outline: none;
-  padding: 2px 4px;
-  transition: border-color 0.15s;
-}
-
-.transcript:not(:placeholder-shown) {
-  border-bottom-color: #e5e7eb;
+  padding: 7px 10px;
+  transition: color 0.15s;
 }
 
 .transcript:focus {
-  border-bottom-color: #6366f1;
   font-style: normal;
   color: #111827;
 }
 
 .transcript.low-confidence {
-  border-bottom-color: #f59e0b;
   color: #92400e;
+}
+
+.search-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px 0 2px;
+  transition: color 0.15s;
+}
+
+.search-btn:hover {
+  color: #6366f1;
+}
+
+.search-btn svg {
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
 }
 
 /* ── Ranking info ── */
